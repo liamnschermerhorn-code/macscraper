@@ -1,0 +1,25 @@
+# Copy to config.toml and edit. Every key is optional; command-line flags win.
+
+max_total = 700        # dollars, including shipping
+min_price = 150        # cheaper than this = accessory / scam / empty box
+offer_stretch = 75     # keep "Best Offer"/local listings up to $775 as POSSIBLE; 0 turns it off
+chips = ["M2", "M3", "M4"]
+ram_options = [24, 32]
+no_auctions = false
+deep = false           # open each candidate page to read specs + description (slower, more accurate)
+
+sources = ["ebay", "craigslist", "reddit"]
+
+# Your nearest Craigslist subdomains (the part before .craigslist.org).
+craigslist_sites = ["sfbay", "sacramento"]
+
+# Free phone push notifications: install the ntfy app, subscribe to a hard-to-guess topic.
+# ntfy_topic = "mac-hunt-change-me-8k2j"
+
+# Extra words that should disqualify a listing (regex, case-insensitive).
+extra_red_flags = ["dent", "bent"]
+
+# Override the search queries if you like.
+# ebay_queries = ["macbook air m2 24gb", "mac mini m2 24gb"]
+# craigslist_queries = ["macbook", "mac mini", "imac"]
+# reddit_queries = ["24GB", "32GB"]

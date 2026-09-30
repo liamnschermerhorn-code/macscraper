@@ -1,0 +1,20 @@
+[project]
+name = "macscraper"
+version = "0.1.0"
+description = "Hunt used-market listings for Apple Silicon Macs (M2/M3/M4, 24/32GB RAM) under a budget"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+    "beautifulsoup4>=4.12",
+    "rich>=13.7",
+]
+
+[project.scripts]
+macscraper = "macscraper.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
