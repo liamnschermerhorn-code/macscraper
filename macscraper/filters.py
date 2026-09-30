@@ -90,7 +90,7 @@ RED_FLAGS = [
     r"no\s+(ssd|logic\s*board|motherboard|board)", r"missing\s+(keys?|parts?|screen|board)",
     r"swollen", r"bad\s+battery", r"service\s+battery", r"kernel\s+panic", r"flickering",
     r"read\s+(the\s+)?description", r"see\s+description", r"box\s+only", r"empty\s+box",
-    r"logic\s*board\s+only", r"screen\s+only", r"housing\s+only", r"replica", r"fake",
+    r"logic\s*board\s+only", r"removed\s+from\s+(a\s+)?(working|functional|donor)", r"pulled\s+from", r"screen\s+only", r"housing\s+only", r"replica", r"fake",
 ]
 RED_FLAG_RE = [re.compile(r"\b" + p + r"\b", re.I) for p in RED_FLAGS]
 
@@ -106,13 +106,35 @@ SAFE_PHRASES = re.compile(
     re.I,
 )
 
-ACCESSORY_RE = re.compile(
-    r"\b(case|shell|skin|sleeve|cover|protector|charger|adapter|cable|dock|docking|stand|hub|"
-    r"keyboard\s+cover|decal|sticker|bag|backpack|replacement\s+(screen|battery|keyboard|display)|"
-    r"lcd\s+assembly|display\s+assembly|battery\s+for|logic\s*board|motherboard|top\s*case|"
-    r"bottom\s*case|trackpad|palm\s*rest|hinge|fan|heatsink|compatible\s+with|fits?)\b",
+# Words that mean the listing is a component, not a computer. Always disqualifying, even
+# next to "with" ("Logic Board 24GB w/ Touch ID" is still just a board).
+PART_RE = re.compile(
+    r"\b(logic\s*board|mother\s*board|main\s*board|system\s*board|board\s+only|"
+    r"top\s*case|bottom\s*case|lower\s*case|upper\s*case|palm\s*rest|chassis|housing|enclosure|"
+    r"(lcd|display|screen|retina)\s+(assembly|panel|replacement)|lcd|"
+    r"replacement\s+(screen|battery|keyboard|display|part)|battery\s+(for|replacement)|"
+    r"heat\s*sink|trackpad|hinge|donor|a\d{4}\s+board|parts?\s+(lot|unit|machine))\b",
     re.I,
 )
+# Add-ons that are fine when they come *with* a Mac ("MacBook Air M2 24GB with charger")
+# but mean an accessory listing otherwise ("MacBook Air M2 Hard Shell Case").
+ACCESSORY_RE = re.compile(
+    r"\b(case|shell|skin|sleeve|cover|protector|charger|adapter|cable|dock|docking|stand|hub|fan|"
+    r"keyboard\s+cover|decal|sticker|bag|backpack|compatible\s+with|fits?)\b",
+    re.I,
+)
+WITH_RE = re.compile(r"\b(with|w/|incl(udes?|uding)?|plus|and)\b|\+|w/", re.I)
+
+
+def is_accessory(title: str) -> bool:
+    for m in ACCESSORY_RE.finditer(title):
+        if m.group(0).lower() in ("compatible with", "fits", "fit"):
+            return True
+        if not WITH_RE.search(title[: m.start()]):
+            return True
+    return False
+
+
 FOR_MAC_RE = re.compile(r"\bfor\s+(apple\s+)?(mac\s?book|mac\s?mini|imac)", re.I)
 WANTED_RE = re.compile(r"\b(wtb|want\s+to\s+buy|looking\s+for|iso|in\s+search\s+of|wanted)\b", re.I)
 
@@ -185,8 +207,10 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
     if kinds and not kinds & set(c.models):
         return reject(f"{'/'.join(sorted(kinds))} not wanted")
     is_mini = kinds == {"mac mini"}
-    if FOR_MAC_RE.search(title) or ACCESSORY_RE.search(title) and not re.search(r"\bwith\b|\bw/|\bincl", title, re.I):
-        return reject("looks like an accessory/part")
+    if m := PART_RE.search(title):
+        return reject(f"part, not a whole computer ({m.group(0)})")
+    if FOR_MAC_RE.search(title) or is_accessory(title):
+        return reject("looks like an accessory")
 
     # --- chip ---
     chips = find_chips(title) or find_chips(body)

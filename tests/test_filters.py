@@ -115,3 +115,39 @@ def test_unknown_shipping_or_price_range_is_not_a_match():
     assert ev("MacBook Air M2 24GB 512GB", shipping=None).verdict == "POSSIBLE"
     it = ev("MacBook Air M2 24GB 512GB", price_is_range=True)
     assert it.verdict == "POSSIBLE" and any("several configs" in r for r in it.reasons)
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        'MacBook Pro 13" 2022 A2338 M2 Chip Logic Board 24GB 1TB w/ Touch ID',
+        "Apple MacBook Air M2 24GB 512GB Motherboard with Heatsink",
+        "MacBook Air 13 M2 A2681 Top Case with Keyboard and Battery",
+        "MacBook Pro 14 M2 Pro LCD Display Assembly Space Gray",
+        "Mac mini M2 24GB 512GB logic board + power supply",
+        "MacBook Air M2 24GB housing chassis",
+        "MacBook Air M3 Hard Shell Case 13.6 inch",
+        "Mac mini M4 24GB stand and cooling fan",
+    ],
+)
+def test_parts_and_accessories_rejected(title):
+    it = ev(title, price=499)
+    assert it.verdict == "REJECT", it.reasons
+    assert "part" in it.reasons[0] or "accessory" in it.reasons[0], it.reasons
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "MacBook Air M2 24GB 512GB with charger and case",
+        "Mac mini M2 24GB 512GB w/ box + power cable",
+        "MacBook Pro 14 M2 Pro 32GB 1TB includes sleeve",
+    ],
+)
+def test_macs_with_extras_still_match(title):
+    assert ev(title).verdict == "MATCH", ev(title).reasons
+
+
+def test_pulled_part_wording_in_condition():
+    it = ev("MacBook Pro M2 24GB 1TB", condition="The board was fully tested and removed from a working environment")
+    assert it.verdict == "REJECT"
