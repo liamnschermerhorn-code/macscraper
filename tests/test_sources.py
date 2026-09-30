@@ -149,3 +149,29 @@ def test_reddit_price_belongs_to_the_mac():
     (it,) = reddit.parse_posts(d, 150)
     assert it.price == 1550.0
     assert reddit.mac_prices("~~MacBook Air M2 - $500~~\nMacBook Air M2 24GB - $640", 150) == [640.0]
+
+
+def test_price_followed_by_comma():
+    from macscraper.http import parse_price
+    assert parse_price("$1000, including shipping") == 1000.0
+    assert parse_price("$650, shipped") == 650.0
+    assert parse_price("$1,000, obo") == 1000.0
+
+
+def test_reddit_mac_mini_post_with_shipping_included():
+    d = _post("No repairs. I ordered an Apple Studio right before the price increase, so I'm selling this. "
+              "Gigabit ethernet. Includes the original box. $1000, including shipping.\n\n"
+              "Pictures: https://imgur.com/a/LJO6QZm")
+    d["data"]["children"][0]["data"]["title"] = "[USA-NY][H]M4 Mac Mini 24 GB / 512 GB [W]Paypal"
+    (it,) = reddit.parse_posts(d, 150)
+    assert it.price == 1000.0 and it.shipping == 0.0
+    from macscraper.filters import Criteria, evaluate
+    assert evaluate(it, Criteria()).reasons[0] == "$1000 over budget"
+
+
+def test_reddit_prices_without_dollar_sign():
+    assert reddit._prices("Asking 650 shipped, local pickup ok", 150) == [650.0]
+    assert reddit._prices("700 OBO", 150) == [700.0]
+    assert reddit._prices("M2 24GB 512GB, 100% battery, 250 cycles", 150) == []
+    assert reddit._prices("Selling for 2 years old, 512 GB", 150) == []
+    assert reddit._prices("$640 shipped, or 600 local", 150) == [640.0]

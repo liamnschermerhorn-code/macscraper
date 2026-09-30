@@ -13,7 +13,8 @@ USER_AGENTS = [
 ]
 
 # "$1,550.00" or "$1550" - the comma form needs at least one comma, otherwise "$1550" would read as $155.
-PRICE_RE = re.compile(r"\$\s?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{2}))?(?![\d,])")
+# A price can't run into more digits ("$1550" isn't "$155"), but can be followed by a comma ("$1000, shipped").
+PRICE_RE = re.compile(r"\$\s?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{2}))?(?!\d|,\d)")
 
 
 def client() -> httpx.Client:

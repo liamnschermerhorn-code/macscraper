@@ -24,6 +24,11 @@ ALL_SOLD_RE = re.compile(
     re.I | re.M,
 )
 GONE_BODIES = {"[removed]", "[deleted]"}
+SHIPPING_INCLUDED_RE = re.compile(
+    r"(including|incl\.?|includes|with|plus\s+free|free)\s+shipping|shipping\s+(is\s+)?(included|incl|free)|"
+    r"\bshipped\b|\bships\s+free",
+    re.I,
+)
 
 
 def _says_sold(text: str) -> bool:
@@ -88,12 +93,25 @@ def mac_prices(body: str, floor: float) -> list[float]:
     return found
 
 
+# Prices written without "$": "650 shipped", "asking 700", "800 OBO", "price: 650".
+BARE_PRICE_RE = re.compile(
+    r"\b(?:asking|price\s*:?|for|at)\s+(\d{3,4}(?:\.\d{2})?)\b(?!\s*(?:gb|tb|mhz|hz|nits|mm|in|inch|\"|cycles?|hours?|days?))|"
+    r"\b(\d{3,4}(?:\.\d{2})?)\s*(?:usd|dollars|bucks|shipped|obo|firm|or\s+best\s+offer|\+\s*ship)",
+    re.I,
+)
+
+
 def _prices(text: str, floor: float) -> list[float]:
     vals = []
     for m in PRICE_RE.finditer(text):
         v = float(m.group(1).replace(",", ""))
         if v >= floor:
             vals.append(v)
+    if not vals:
+        for m in BARE_PRICE_RE.finditer(text):
+            v = float(m.group(1) or m.group(2))
+            if v >= floor:
+                vals.append(v)
     return vals
 
 
@@ -121,7 +139,7 @@ def parse_posts(data: dict, min_price: float) -> list[Listing]:
             title=have.group(1).strip(" -|,"),
             url=f"https://redd.it/{p['id']}" if p.get("id") else "https://www.reddit.com" + p.get("permalink", ""),
             price=min(prices) if prices else None,
-            shipping=None,
+            shipping=0.0 if SHIPPING_INCLUDED_RE.search(have.group(1) + " " + body) else None,
             location=loc.group(1) if loc else "",
             description=body[:4000],
             negotiable=True,
