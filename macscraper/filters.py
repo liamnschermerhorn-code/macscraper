@@ -139,6 +139,32 @@ FOR_MAC_RE = re.compile(r"\bfor\s+(apple\s+)?(mac\s?book|mac\s?mini|imac)", re.I
 WANTED_RE = re.compile(r"\b(wtb|want\s+to\s+buy|looking\s+for|iso|in\s+search\s+of|wanted)\b", re.I)
 
 
+SHIPS_RE = re.compile(
+    r"\b((will|can|could|happy\s+to|willing\s+to|able\s+to|open\s+to|ok\s+to|glad\s+to)\s+(ship|mail|deliver)|"
+    r"shipping\s+(is\s+)?(available|ok|okay|possible|offered|included|avail)|"
+    r"ships?\s+(anywhere|nationwide|to\s+you|within|in\s+the\s+us|free|via|usps|ups|fedex)|"
+    r"(free|paid|buyer\s+pays(\s+for)?|plus|\+)\s+shipping|delivery\s+available|"
+    r"(fedex|ups|usps)|shipped\b)",
+    re.I,
+)
+NO_SHIP_RE = re.compile(
+    r"\b(no\s+shipping|(will\s+)?not\s+ship|won'?t\s+ship|don'?t\s+ship|do\s+not\s+ship|can'?t\s+ship|"
+    r"cannot\s+ship|no\s+ship|local\s+(pick\s*up\s+)?only|pick\s*up\s+only|in\s+person\s+only|"
+    r"cash\s+(only\s+)?in\s+person)\b",
+    re.I,
+)
+SHIP_REJECT = "not local and seller doesn't offer shipping"
+
+
+def seller_ships(text: str) -> bool | None:
+    """True if the post offers shipping, False if it rules it out, None if it doesn't say."""
+    if NO_SHIP_RE.search(text):
+        return False
+    if SHIPS_RE.search(text):
+        return True
+    return None
+
+
 def find_chips(text: str) -> set[str]:
     chips = set()
     for m in CHIP_RE.finditer(text):
@@ -269,6 +295,15 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
         reasons.insert(0, "!! description mentions: " + ", ".join(desc_flags) + " - read it")
     if re.search(r"parts|not\s+working", item.condition, re.I):
         return reject(f"condition: {item.condition}")
+
+    # --- out-of-town Craigslist: must ship ---
+    if item.needs_shipping:
+        ships = seller_ships(text)
+        if ships is False:
+            return reject(SHIP_REJECT + " (says local/pickup only)")
+        if ships is None:
+            return reject(SHIP_REJECT)
+        reasons.append("out-of-town seller who ships - confirm cost, pay with PayPal Goods & Services")
 
     # --- price ---
     if item.price is None:

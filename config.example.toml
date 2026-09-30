@@ -12,8 +12,16 @@ deep = false           # open each candidate page to read specs + description (s
 
 sources = ["ebay", "craigslist", "reddit"]
 
-# Your nearest Craigslist subdomains (the part before .craigslist.org).
-craigslist_sites = ["sfbay", "sacramento"]
+# Craigslist, part 1 - LOCAL: your nearest Craigslist subdomains (the part before .craigslist.org,
+# e.g. https://sfbay.craigslist.org -> "sfbay"). Everything here counts as local pickup.
+craigslist_sites = []   # e.g. ["sfbay"] or ["sfbay", "sacramento"]
+# Optional: only local listings within this many miles of your ZIP code.
+# home_zip = "94103"
+# max_distance_miles = 30
+
+# Craigslist, part 2 - OTHER CITIES: searched too, but a post is only kept if the seller
+# says they'll ship ("will ship", "shipping available", "+ shipping", ...). "Local only" posts are dropped.
+craigslist_ship_sites = ["sfbay", "losangeles", "newyork", "chicago", "seattle", "boston"]
 
 # Free phone push notifications: install the ntfy app, subscribe to a hard-to-guess topic.
 # ntfy_topic = "mac-hunt-change-me-8k2j"

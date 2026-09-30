@@ -17,6 +17,8 @@ class Listing:
     negotiable: bool = False  # eBay Best Offer, or a local/private sale
     price_is_range: bool = False  # eBay "$450 to $900" listings with several configurations
     posted: str = ""
+    # Craigslist listing from a city that isn't yours: only useful if the seller ships.
+    needs_shipping: bool = False
 
     # Filled in by filters.evaluate()
     verdict: str = ""  # MATCH / POSSIBLE / REJECT

@@ -83,3 +83,13 @@ def test_ebay_price_range_and_pagination_url():
     assert it.price == 450.0 and it.price_is_range
     assert ebay.search_url("macbook (24gb,32gb)", 775, 150, page=2).endswith("&_pgn=2")
     assert "_pgn" not in ebay.search_url("macbook", 775, 150)
+
+
+def test_craigslist_local_vs_shipping_sites():
+    (local,) = craigslist.parse_search(CL, "sfbay", local=True)
+    (remote,) = craigslist.parse_search(CL, "boston", local=False)
+    assert local.shipping == 0.0 and not local.needs_shipping
+    assert remote.shipping is None and remote.needs_shipping
+    url = craigslist.search_url("sfbay", "macbook", 775, 150, postal="94103", distance=30)
+    assert "postal=94103" in url and "search_distance=30" in url
+    assert "postal" not in craigslist.search_url("boston", "macbook", 775, 150)

@@ -18,7 +18,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from .filters import Criteria, evaluate
+from .filters import SHIP_REJECT, Criteria, evaluate
 from .http import client as make_client
 from .http import polite_pause
 from .models import Listing
@@ -28,7 +28,8 @@ console = Console(stderr=True)
 
 DEFAULT_CL_QUERIES = ["macbook", "mac mini"]
 DEFAULT_REDDIT_QUERIES = ["24GB", "32GB", "M2", "M3", "M4"]
-DEFAULT_CL_SITES = ["sfbay", "losangeles", "newyork", "chicago", "seattle", "boston"]
+# Big-city Craigslists searched for sellers who will ship. Your own city goes in craigslist_sites.
+DEFAULT_CL_SHIP_SITES = ["sfbay", "losangeles", "newyork", "chicago", "seattle", "boston"]
 
 
 def load_config(path: Path | None) -> dict:
@@ -67,9 +68,15 @@ def collect(args, cfg: dict, crit: Criteria) -> list[Listing]:
             return ebay.search(c, cfg.get("ebay_queries", ebay.DEFAULT_QUERIES), search_ceiling, crit.min_price, log)
 
     def run_craigslist():
-        sites = args.cl_sites.split(",") if args.cl_sites else cfg.get("craigslist_sites", DEFAULT_CL_SITES)
+        local = args.cl_sites.split(",") if args.cl_sites else cfg.get("craigslist_sites", [])
+        ship = cfg.get("craigslist_ship_sites", DEFAULT_CL_SHIP_SITES)
+        if not local:
+            log("[craigslist] no local cities set (craigslist_sites in config.toml) - only showing sellers who ship")
         with make_client() as c:
-            return craigslist.search(c, sites, cfg.get("craigslist_queries", DEFAULT_CL_QUERIES), search_ceiling, crit.min_price, log)
+            return craigslist.search(
+                c, local, ship, cfg.get("craigslist_queries", DEFAULT_CL_QUERIES), search_ceiling, crit.min_price, log,
+                postal=str(cfg["home_zip"]) if cfg.get("home_zip") else None, distance=cfg.get("max_distance_miles"),
+            )
 
     def run_reddit():
         with make_client() as c:
@@ -90,6 +97,22 @@ def collect(args, cfg: dict, crit: Criteria) -> list[Listing]:
         for it in items:
             uniq.setdefault(it.key, it)
         items = [evaluate(it, crit) for it in uniq.values()]
+
+        # Out-of-town Craigslist posts only survive if the seller ships, which is only ever
+        # written in the post body - so open the ones that pass every other check.
+        ship_check = [it for it in items if it.needs_shipping and not it.description
+                      and it.reasons and it.reasons[0] == SHIP_REJECT]
+        if ship_check:
+            log(f"[craigslist] checking {len(ship_check)} out-of-town posts for shipping...")
+        for it in ship_check:
+            try:
+                it.description = craigslist.item_details(c, it.url)
+            except httpx.HTTPError as e:
+                log(f"  couldn't open {it.url}: {e}")
+                continue
+            it.reasons = []
+            evaluate(it, crit)
+            polite_pause()
 
         if args.deep:
             todo = [it for it in items if it.verdict != "REJECT" and not it.description]
@@ -243,7 +266,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--max", type=float, default=None, help="max total price incl. shipping (default 700)")
     p.add_argument("--min", type=float, default=None, help="ignore listings cheaper than this (default 150)")
     p.add_argument("--stretch", type=float, default=None, help="keep negotiable listings up to this much over budget (default 75, 0 = off)")
-    p.add_argument("--cl-sites", default=None, help="craigslist subdomains, e.g. sfbay,sacramento")
+    p.add_argument("--cl-sites", default=None, help="your local craigslist subdomains, e.g. sfbay,sacramento")
     p.add_argument("--no-auctions", action="store_true")
     p.add_argument("--loose", action="store_true", help="also keep listings that state neither chip nor RAM")
     p.add_argument("--deep", action="store_true", help="open each candidate's page to read specs/description")

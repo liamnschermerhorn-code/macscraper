@@ -151,3 +151,24 @@ def test_macs_with_extras_still_match(title):
 def test_pulled_part_wording_in_condition():
     it = ev("MacBook Pro M2 24GB 1TB", condition="The board was fully tested and removed from a working environment")
     assert it.verdict == "REJECT"
+
+
+def ev_remote(title, description=""):
+    return evaluate(Listing(source="craigslist/boston (ships?)", title=title, url="u", price=600, shipping=None,
+                            description=description, needs_shipping=True), C)
+
+
+def test_out_of_town_craigslist_needs_shipping():
+    t = "MacBook Air M2 24GB 512GB"
+    assert ev_remote(t).reasons[0].startswith("not local")
+    assert ev_remote(t, "Great shape. Local pickup only, cash.").verdict == "REJECT"
+    assert ev_remote(t, "Great shape. Won't ship, sorry").verdict == "REJECT"
+    for ok in ("Can ship anywhere in the US", "Shipping available, buyer pays", "$640 shipped via UPS", "Happy to ship"):
+        it = ev_remote(t, ok)
+        assert it.verdict == "POSSIBLE", (ok, it.reasons)  # shipping cost unknown -> never a clean MATCH
+        assert any("ships" in r for r in it.reasons)
+
+
+def test_local_craigslist_unaffected():
+    it = evaluate(Listing(source="craigslist/sfbay", title="MacBook Air M2 24GB 512GB", url="u", price=600, shipping=0.0), C)
+    assert it.verdict == "MATCH"

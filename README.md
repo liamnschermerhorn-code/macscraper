@@ -14,7 +14,7 @@ fully working, ≤ $700 delivered**. It sorts every listing into:
 ```sh
 brew install uv            # if you don't have it
 git clone <this repo> && cd macscraper
-cp config.example.toml config.toml   # set your Craigslist cities here
+cp config.example.toml config.toml   # set your local Craigslist city (and ZIP) here
 uv run macscraper                     # one pass, opens nothing, prints a table
 open results/report.html              # clickable report, also results.csv / results.json
 ```
@@ -30,6 +30,13 @@ uv run macscraper --loose                    # also keep listings that state nei
 ```
 
 `results/seen.json` remembers what you've already seen, so the report and alerts mark only new listings as **NEW**.
+
+### Craigslist: local or ships
+
+- **Local** (`craigslist_sites`, optionally within `max_distance_miles` of `home_zip`): every listing counts, as pickup.
+- **Other cities** (`craigslist_ship_sites`): a listing is kept only if the seller's post says they'll ship
+  ("will ship", "shipping available", "+ shipping", "shipped"...). "Local pickup only" or silent posts are dropped.
+  These are always POSSIBLE, since shipping cost isn't known - pay with PayPal Goods & Services, never Zelle/cash app.
 
 ### eBay API (optional, recommended)
 
