@@ -2,12 +2,13 @@
 
 max_total = 700        # dollars, including shipping
 min_price = 150        # cheaper than this = accessory / scam / empty box
-offer_stretch = 75     # keep "Best Offer"/local listings up to $775 as POSSIBLE; 0 turns it off
+offer_stretch = 75     # default for "Include flexible prices?": keep Best Offer/local listings up to $775; 0 = no
 chips = ["M2", "M3", "M4"]
 ram_options = [24, 32]
 models = ["macbook", "mac mini", "mac studio"]   # also possible: "imac"
 mini_penalty = 5                   # rank desktops (mini/Studio) a little below MacBooks; 0 = equal
-no_auctions = false
+no_auctions = false    # default answer to "Include auctions?" at startup
+stale_days = 10        # Reddit posts older than this stay POSSIBLE, with a "may be gone" note
 deep = false           # open each candidate page to read specs + description (slower, more accurate)
 
 sources = ["ebay", "craigslist", "reddit"]

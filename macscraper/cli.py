@@ -275,6 +275,43 @@ def run_once(args, cfg: dict, crit: Criteria) -> None:
         notify(args.ntfy, fresh)
 
 
+def ask_yes_no(question: str, default: bool) -> bool:
+    hint = "Y/n" if default else "y/N"
+    while True:
+        answer = input(f"{question} [{hint}] ").strip().lower()
+        if not answer:
+            return default
+        if answer in ("y", "yes"):
+            return True
+        if answer in ("n", "no"):
+            return False
+        print("  please answer y or n")
+
+
+def ask_preferences(crit: Criteria, ask_auctions: bool = True, ask_stretch: bool = True) -> None:
+    """Startup questions; pressing Enter keeps the config.toml / default answer."""
+    if ask_auctions:
+        crit.allow_auctions = ask_yes_no("Include auctions? (current bid, final price will be higher)", crit.allow_auctions)
+    if ask_stretch:
+        default_amount = crit.offer_stretch or 75
+        if ask_yes_no(
+            f"Include flexible prices? (Best Offer / local listings a bit over ${crit.max_total:.0f} you could negotiate down)",
+            crit.offer_stretch > 0,
+        ):
+            while True:
+                raw = input(f"  How far over ${crit.max_total:.0f} is OK? [${default_amount:.0f}] ").strip().lstrip("$")
+                try:
+                    crit.offer_stretch = float(raw) if raw else float(default_amount)
+                    break
+                except ValueError:
+                    print("  please enter a dollar amount, e.g. 50")
+        else:
+            crit.offer_stretch = 0.0
+    parts = ["auctions " + ("on" if crit.allow_auctions else "off"),
+             f"flexible prices up to ${crit.max_total + crit.offer_stretch:.0f}" if crit.offer_stretch else "strictly ≤ $" + f"{crit.max_total:.0f}"]
+    console.log("Searching with " + ", ".join(parts))
+
+
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description="Find M2/M3/M4 Macs with 24/32GB RAM under budget.")
     p.add_argument("--config", type=Path, default=Path("config.toml"))
@@ -283,7 +320,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--min", type=float, default=None, help="ignore listings cheaper than this (default 150)")
     p.add_argument("--stretch", type=float, default=None, help="keep negotiable listings up to this much over budget (default 75, 0 = off)")
     p.add_argument("--cl-sites", default=None, help="your local craigslist subdomains, e.g. sfbay,sacramento")
-    p.add_argument("--no-auctions", action="store_true")
+    p.add_argument("--auctions", action="store_true", default=None, help="include auctions (skips the question)")
+    p.add_argument("--no-auctions", dest="auctions", action="store_false", help="skip auctions (skips the question)")
+    p.add_argument("--no-ask", action="store_true", help="don't ask questions at startup; use config/defaults")
     p.add_argument("--loose", action="store_true", help="also keep listings that state neither chip nor RAM")
     p.add_argument("--deep", action="store_true", help="open each candidate's page to read specs/description")
     p.add_argument("--watch", type=float, default=0, help="re-run every N minutes")
@@ -306,10 +345,13 @@ def main(argv: list[str] | None = None) -> None:
         ram_options=tuple(cfg.get("ram_options", (24, 32))),
         models=tuple(m.lower() for m in cfg.get("models", ("macbook", "mac mini", "mac studio"))),
         mini_penalty=cfg.get("mini_penalty", 5),
-        allow_auctions=not (args.no_auctions or cfg.get("no_auctions", False)),
+        allow_auctions=not cfg.get("no_auctions", False) if args.auctions is None else args.auctions,
         extra_red_flags=cfg.get("extra_red_flags", []),
         loose=args.loose or cfg.get("loose", False),
+        stale_days=cfg.get("stale_days", 10),
     )
+    if not args.no_ask and sys.stdin.isatty():
+        ask_preferences(crit, ask_auctions=args.auctions is None, ask_stretch=args.stretch is None)
 
     while True:
         try:
