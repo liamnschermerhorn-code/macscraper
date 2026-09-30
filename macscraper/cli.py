@@ -99,6 +99,21 @@ def collect(args, cfg: dict, crit: Criteria) -> list[Listing]:
             uniq.setdefault(it.key, it)
         items = [evaluate(it, crit) for it in uniq.values()]
 
+        # Reddit: read the comments of posts that pass every other check for "sold"/"pending".
+        reddit_check = [it for it in items if it.source.startswith("reddit") and it.verdict != "REJECT"]
+        if reddit_check:
+            log(f"[reddit] checking comments on {len(reddit_check)} posts for sold/pending...")
+        for it in reddit_check:
+            try:
+                reddit.check_comments(c, it)
+            except (httpx.HTTPError, ValueError) as e:
+                log(f"  couldn't read comments for {it.url}: {e}")
+                continue
+            if it.sold_note:
+                it.reasons = []
+                evaluate(it, crit)
+            polite_pause()
+
         # Out-of-town Craigslist posts only survive if the seller ships, which is only ever
         # written in the post body - so open the ones that pass every other check.
         ship_check = [it for it in items if it.needs_shipping and not it.description

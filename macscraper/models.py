@@ -19,6 +19,12 @@ class Listing:
     posted: str = ""
     # Craigslist listing from a city that isn't yours: only useful if the seller ships.
     needs_shipping: bool = False
+    # Signs the item may already be gone (Reddit). A note keeps it from being a clean MATCH;
+    # sold=True rejects it outright.
+    sold_note: str = ""
+    sold: bool = False
+    age_days: float | None = None
+    meta: dict = field(default_factory=dict)
 
     # Filled in by filters.evaluate()
     verdict: str = ""  # MATCH / POSSIBLE / REJECT

@@ -180,3 +180,12 @@ def test_local_craigslist_unaffected():
 def test_mac_studio_year_inference():
     it = ev("Apple Mac Studio 2023 32GB 512GB")
     assert it.verdict == "POSSIBLE" and it.chip == "M2?"
+
+
+def test_sold_and_stale_handling():
+    assert ev("MacBook Air M2 24GB 512GB", sold=True, sold_note="seller commented: sold").verdict == "REJECT"
+    it = ev("MacBook Air M2 24GB 512GB", sold_note="swap bot confirmed a trade in the comments")
+    assert it.verdict == "POSSIBLE" and it.reasons[0].startswith("!!")
+    it = ev("MacBook Air M2 24GB 512GB", age_days=14)
+    assert it.verdict == "POSSIBLE" and any("14 days ago" in r for r in it.reasons)
+    assert ev("MacBook Air M2 24GB 512GB", age_days=3).verdict == "MATCH"

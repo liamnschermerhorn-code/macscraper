@@ -93,3 +93,38 @@ def test_craigslist_local_vs_shipping_sites():
     url = craigslist.search_url("sfbay", "macbook", 775, 150, postal="94103", distance=30)
     assert "postal=94103" in url and "search_distance=30" in url
     assert "postal" not in craigslist.search_url("boston", "macbook", 775, 150)
+
+
+def _post(body, flair="Selling", **extra):
+    import time as _t
+    d = {"title": "[USA-IN] [H] MacBook Air M2 24GB/512GB [W] PayPal", "selftext": body, "id": "abc",
+         "author": "seller1", "permalink": "/r/appleswap/comments/abc/", "link_flair_text": flair,
+         "created_utc": _t.time() - 2 * 86400}
+    d.update(extra)
+    return {"data": {"children": [{"data": d}]}}
+
+
+def test_reddit_sold_signals_in_post():
+    assert reddit.parse_posts(_post("[removed]"), 150) == []
+    assert reddit.parse_posts(_post("hi", author="[deleted]"), 150) == []
+    assert reddit.parse_posts(_post("hi", flair="SOLD"), 150) == []
+    assert reddit.parse_posts(_post("EDIT: sold, thanks all!\n\nMacBook Air M2 24GB $600"), 150) == []
+    assert reddit.parse_posts(_post("~~MacBook Air M2 24GB - $600~~"), 150) == []
+    assert reddit.parse_posts(_post("MacBook Air M2 24GB - $600 SOLD"), 150) == []
+    (it,) = reddit.parse_posts(_post("MacBook Air M2 24GB - $600 - not sold yet, still available"), 150)
+    assert not it.sold_note
+    (it,) = reddit.parse_posts(_post("~~MacBook Pro M1 16GB - $700~~\nMacBook Air M2 24GB - $600"), 150)
+    assert "crossed out" in it.sold_note
+
+
+def test_reddit_comment_signals():
+    comments = [{}, {"data": {"children": [
+        {"data": {"author": "buyer", "body": "is this sold?", "replies": {"data": {"children": [
+            {"data": {"author": "seller1", "body": "Sale pending, sorry"}}]}}}},
+        {"data": {"author": "AppleSwapBot", "body": "Trade confirmed between u/a and u/b"}},
+    ]}}]
+    sig = reddit.comment_signals(comments, "seller1")
+    assert any(s.startswith("seller commented") for s in sig)
+    assert any("bot" in s for s in sig)
+    assert reddit.comment_signals([{}, {"data": {"children": [
+        {"data": {"author": "seller1", "body": "Nope, still available!"}}]}}], "seller1") == []

@@ -30,6 +30,8 @@ class Criteria:
     models: tuple[str, ...] = ("macbook", "mac mini", "mac studio")
     # Score penalty for desktops (Mac mini / Mac Studio), so MacBooks rank first at a similar price. 0 = equal.
     mini_penalty: int = 5
+    # Posts older than this many days are kept, but only as POSSIBLE.
+    stale_days: float = 10
     # Keep listings that state neither chip nor RAM (lots of noise, occasionally a steal).
     loose: bool = False
 
@@ -299,6 +301,15 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
     if re.search(r"parts|not\s+working", item.condition, re.I):
         return reject(f"condition: {item.condition}")
 
+    # --- already sold? ---
+    if item.sold:
+        return reject("already sold: " + (item.sold_note or "marked sold"))
+    if item.sold_note:
+        reasons.insert(0, "!! " + item.sold_note)
+    stale = item.age_days is not None and item.age_days > c.stale_days
+    if stale:
+        reasons.append(f"posted {item.age_days:.0f} days ago - may already be gone, check the comments")
+
     # --- out-of-town Craigslist: must ship ---
     if item.needs_shipping:
         ships = seller_ships(text)
@@ -336,6 +347,7 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
     confirmed = (
         chip_known and ram_known and price_known and item.shipping is not None
         and not item.is_auction and not item.price_is_range and not desc_flags
+        and not item.sold_note and not stale
     )
     item.verdict = "MATCH" if confirmed else "POSSIBLE"
 
@@ -350,6 +362,8 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
     score -= 0 if ram_known else 20
     score -= 10 if item.is_auction else 0
     score -= 25 if desc_flags else 0
+    score -= 20 if item.sold_note else 0
+    score -= 10 if stale else 0
     score -= c.mini_penalty if is_mini else 0
     item.score = score
     item.reasons = reasons
