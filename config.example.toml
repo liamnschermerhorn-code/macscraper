@@ -5,8 +5,8 @@ min_price = 150        # cheaper than this = accessory / scam / empty box
 offer_stretch = 75     # keep "Best Offer"/local listings up to $775 as POSSIBLE; 0 turns it off
 chips = ["M2", "M3", "M4"]
 ram_options = [24, 32]
-models = ["macbook", "mac mini"]   # also possible: "imac", "mac studio"
-mini_penalty = 5                   # rank Mac minis a little below MacBooks; 0 = equal
+models = ["macbook", "mac mini", "mac studio"]   # also possible: "imac"
+mini_penalty = 5                   # rank desktops (mini/Studio) a little below MacBooks; 0 = equal
 no_auctions = false
 deep = false           # open each candidate page to read specs + description (slower, more accurate)
 
@@ -31,5 +31,5 @@ extra_red_flags = ["dent", "bent"]
 
 # Override the search queries if you like.
 # ebay_queries = ["macbook air m2 24gb", "mac mini m2 24gb"]
-# craigslist_queries = ["macbook", "mac mini"]
+# craigslist_queries = ["macbook", "mac mini", "mac studio"]
 # reddit_queries = ["24GB", "32GB"]

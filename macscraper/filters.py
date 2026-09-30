@@ -27,8 +27,8 @@ class Criteria:
     offer_stretch: float = 75.0
     extra_red_flags: list[str] = field(default_factory=list)
     # Which kinds of Mac to keep: any of "macbook", "mac mini", "imac", "mac studio".
-    models: tuple[str, ...] = ("macbook", "mac mini")
-    # Score penalty for Mac minis, so MacBooks rank first at a similar price. 0 = treat equally.
+    models: tuple[str, ...] = ("macbook", "mac mini", "mac studio")
+    # Score penalty for desktops (Mac mini / Mac Studio), so MacBooks rank first at a similar price. 0 = equal.
     mini_penalty: int = 5
     # Keep listings that state neither chip nor RAM (lots of noise, occasionally a steal).
     loose: bool = False
@@ -60,6 +60,8 @@ RAM_WORDS = re.compile(r"^\s*(ram|memory|unified|mem|ddr|lpddr)", re.I)
 
 # Model-year -> chip inference, used only when the listing never names the chip.
 YEAR_HINTS = [
+    (re.compile(r"mac\s?studio.*\b2023\b|\b2023\b.*mac\s?studio", re.I), "M2"),
+    (re.compile(r"mac\s?studio.*\b2025\b|\b2025\b.*mac\s?studio", re.I), "M4"),
     (re.compile(r"macbook\s?air.*\b(2022|2023)\b|\b(2022|2023)\b.*macbook\s?air", re.I), "M2"),
     (re.compile(r"macbook\s?air.*\b2024\b|\b2024\b.*macbook\s?air", re.I), "M3"),
     (re.compile(r"macbook\s?air.*\b2025\b|\b2025\b.*macbook\s?air", re.I), "M4"),
@@ -74,7 +76,8 @@ YEAR_HINTS = [
 OLD_YEAR_RE = re.compile(
     r"(macbook\s?air|mac\s?mini).{0,40}\b(20(0\d|1\d|20))\b|\b(20(0\d|1\d|20))\b.{0,40}(macbook\s?air|mac\s?mini)|"
     r"imac.{0,40}\b(20(0\d|1\d|21))\b|\b(20(0\d|1\d|21))\b.{0,40}imac|"
-    r"macbook\s?pro.{0,40}\b(20(0\d|1\d|20|21))\b|\b(20(0\d|1\d|20|21))\b.{0,40}macbook\s?pro",
+    r"macbook\s?pro.{0,40}\b(20(0\d|1\d|20|21))\b|\b(20(0\d|1\d|20|21))\b.{0,40}macbook\s?pro|"
+    r"mac\s?studio.{0,40}\b2022\b|\b2022\b.{0,40}mac\s?studio",
     re.I,
 )
 
@@ -232,7 +235,7 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
     kinds = {k for k, rx in MODEL_RES.items() if rx.search(title)} or {k for k, rx in MODEL_RES.items() if rx.search(text)}
     if kinds and not kinds & set(c.models):
         return reject(f"{'/'.join(sorted(kinds))} not wanted")
-    is_mini = kinds == {"mac mini"}
+    is_mini = bool(kinds) and kinds <= {"mac mini", "mac studio"}  # desktop
     if m := PART_RE.search(title):
         return reject(f"part, not a whole computer ({m.group(0)})")
     if FOR_MAC_RE.search(title) or is_accessory(title):

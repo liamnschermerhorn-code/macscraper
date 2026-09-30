@@ -115,13 +115,14 @@ def _warm_up(client: httpx.Client) -> None:
 DEFAULT_QUERIES = [
     "macbook (24gb,32gb)",
     "mac mini (24gb,32gb)",
+    "mac studio (m2,m4) 32gb",
     '(macbook,mac mini) (m2,m3,m4) ("24 gb","32 gb")',
 ]
 FALLBACK_QUERIES = [
     "macbook air m2 24gb", "macbook air m3 24gb", "macbook air m4 24gb", "macbook air m4 32gb",
     "macbook pro m2 24gb", "macbook pro m2 pro 32gb", "macbook pro m3 24gb", "macbook pro m4 24gb",
     "mac mini m2 24gb", "mac mini m2 pro 32gb", "mac mini m4 24gb", "mac mini m4 32gb",
-    "macbook 24gb", "macbook 32gb m2", "mac mini 24gb",
+    "macbook 24gb", "macbook 32gb m2", "mac mini 24gb", "mac studio m2 max 32gb", "mac studio 32gb",
 ]
 MAX_PAGES = 3  # 240 results per page, newest first
 

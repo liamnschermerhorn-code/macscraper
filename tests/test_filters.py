@@ -19,6 +19,7 @@ def ev(title, price=600.0, shipping=0.0, **kw):
         "Apple MacBook Air 15\" M3 8-core 24 GB unified memory 1TB",
         "MacBook Air M2 24GB 1TB - iCloud unlocked, no MDM, no damage",
         "Mac mini M2 24gb/256gb with charger and box",
+        "Apple Mac Studio M2 Max 32GB 512GB",
     ],
 )
 def test_matches(title):
@@ -45,7 +46,9 @@ def test_matches(title):
         ("Samsung M.2 NVMe SSD 1TB", "not a Mac"),
         ("Mac mini 2020 16GB", "M1 or Intel"),
         ("Apple iMac 24\" M3 24GB 1TB", "imac not wanted"),
-        ("Mac Studio M2 Max 32GB", "mac studio not wanted"),
+        ("Mac Studio 2022 32GB 512GB", "M1 or Intel"),
+        ("Mac Studio M1 Max 32GB", "chip"),
+        ("Mac Studio M4 Max 36GB", "RAM"),
         ("MacBook Pro 16 2021 32GB", "M1 or Intel"),
     ],
 )
@@ -172,3 +175,8 @@ def test_out_of_town_craigslist_needs_shipping():
 def test_local_craigslist_unaffected():
     it = evaluate(Listing(source="craigslist/sfbay", title="MacBook Air M2 24GB 512GB", url="u", price=600, shipping=0.0), C)
     assert it.verdict == "MATCH"
+
+
+def test_mac_studio_year_inference():
+    it = ev("Apple Mac Studio 2023 32GB 512GB")
+    assert it.verdict == "POSSIBLE" and it.chip == "M2?"

@@ -26,7 +26,7 @@ from .sources import craigslist, ebay, reddit
 
 console = Console(stderr=True)
 
-DEFAULT_CL_QUERIES = ["macbook", "mac mini"]
+DEFAULT_CL_QUERIES = ["macbook", "mac mini", "mac studio"]
 DEFAULT_REDDIT_QUERIES = ["24GB", "32GB", "M2", "M3", "M4"]
 # Big-city Craigslists searched for sellers who will ship. Your own city goes in craigslist_sites.
 DEFAULT_CL_SHIP_SITES = ["sfbay", "losangeles", "newyork", "chicago", "seattle", "boston"]
@@ -46,6 +46,7 @@ def manual_links(max_total: float) -> dict[str, str]:
         "Facebook Marketplace (MacBook 24GB)": f"https://www.facebook.com/marketplace/search/?query={q}&maxPrice={m}&exact=false",
         "Facebook Marketplace (Mac mini 24GB)": f"https://www.facebook.com/marketplace/search/?query={quote_plus('mac mini 24gb')}&maxPrice={m}",
         "OfferUp (MacBook 24GB)": f"https://offerup.com/search?q={q}&PRICE_MAX={m}",
+        "Facebook Marketplace (Mac Studio)": f"https://www.facebook.com/marketplace/search/?query={quote_plus('mac studio m2 max')}&maxPrice={m}",
         "OfferUp (Mac mini 24GB)": f"https://offerup.com/search?q={quote_plus('mac mini 24gb')}&PRICE_MAX={m}",
         "Mercari (MacBook 24GB)": f"https://www.mercari.com/search/?keyword={q}&maxPrice={m * 100}&itemStatuses=1",
         "Swappa (MacBook Air M2)": "https://swappa.com/listings/macbook-air-13-2022",
@@ -176,7 +177,7 @@ tr.match{{background:var(--match)}}tr.possible{{background:var(--poss)}}small{{c
 .wrap{{overflow-x:auto}}
 </style>
 <h1>Mac deal hunt</h1>
-<p>MacBook / Mac mini · M2/M3/M4 · {"/".join(str(r) for r in crit.ram_options)}GB RAM · ≤ ${crit.max_total:.0f} delivered · fully working.
+<p>MacBook / Mac mini / Mac Studio · M2/M3/M4 · {"/".join(str(r) for r in crit.ram_options)}GB RAM · ≤ ${crit.max_total:.0f} delivered · fully working.
 Generated {datetime.now():%Y-%m-%d %H:%M}. <b>{sum(i.verdict == "MATCH" for i in items)}</b> matches,
 <b>{sum(i.verdict == "POSSIBLE" for i in items)}</b> possibles, {len(rejects)} rejected.</p>
 <p><small>MATCH = chip, RAM and price confirmed from the listing, no red flags. POSSIBLE = nothing disqualifying but something
@@ -288,7 +289,7 @@ def main(argv: list[str] | None = None) -> None:
         offer_stretch=pick(args.stretch, "offer_stretch", 75.0),
         chips=tuple(cfg.get("chips", ("M2", "M3", "M4"))),
         ram_options=tuple(cfg.get("ram_options", (24, 32))),
-        models=tuple(m.lower() for m in cfg.get("models", ("macbook", "mac mini"))),
+        models=tuple(m.lower() for m in cfg.get("models", ("macbook", "mac mini", "mac studio"))),
         mini_penalty=cfg.get("mini_penalty", 5),
         allow_auctions=not (args.no_auctions or cfg.get("no_auctions", False)),
         extra_red_flags=cfg.get("extra_red_flags", []),
