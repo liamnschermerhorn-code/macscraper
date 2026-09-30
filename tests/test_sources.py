@@ -75,3 +75,11 @@ def test_ebay_drops_fewer_words_section():
         '<li class="s-item"><a href="https://www.ebay.com/itm/999"><div class="s-item__title">MacBook Air M1 8GB</div></a>' + \
         '<span class="s-item__price">$400.00</span></li></ul>'
     assert [i.url for i in ebay.parse_search(html)] == ["https://www.ebay.com/itm/256356759063"]
+
+
+def test_ebay_price_range_and_pagination_url():
+    html = EBAY_CLASSIC.replace("$689.00", "$450.00 to $900.00")
+    (it,) = ebay.parse_search(html)
+    assert it.price == 450.0 and it.price_is_range
+    assert ebay.search_url("macbook (24gb,32gb)", 775, 150, page=2).endswith("&_pgn=2")
+    assert "_pgn" not in ebay.search_url("macbook", 775, 150)

@@ -7,6 +7,7 @@ import json
 import sys
 import time
 import tomllib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
@@ -24,12 +25,6 @@ from .sources import craigslist, ebay, reddit
 
 console = Console(stderr=True)
 
-DEFAULT_EBAY_QUERIES = [
-    "macbook air m2 24gb", "macbook air m3 24gb", "macbook air m4 24gb", "macbook air m4 32gb",
-    "macbook pro m2 24gb", "macbook pro m2 pro 32gb", "macbook pro m3 24gb", "macbook pro m4 24gb",
-    "mac mini m2 24gb", "mac mini m2 pro 32gb", "mac mini m4 24gb", "mac mini m4 32gb",
-    "macbook 24gb", "macbook 32gb m2", "mac mini 24gb",
-]
 DEFAULT_CL_QUERIES = ["macbook", "mac mini"]
 DEFAULT_REDDIT_QUERIES = ["24GB", "32GB", "M2", "M3", "M4"]
 DEFAULT_CL_SITES = ["sfbay", "losangeles", "newyork", "chicago", "seattle", "boston"]
@@ -64,15 +59,31 @@ def collect(args, cfg: dict, crit: Criteria) -> list[Listing]:
     search_ceiling = crit.max_total + crit.offer_stretch
     items: list[Listing] = []
     log = console.log
-    with make_client() as c:
-        if "ebay" in sources:
-            items += ebay.search(c, cfg.get("ebay_queries", DEFAULT_EBAY_QUERIES), search_ceiling, crit.min_price, log)
-        if "craigslist" in sources:
-            sites = args.cl_sites.split(",") if args.cl_sites else cfg.get("craigslist_sites", DEFAULT_CL_SITES)
-            items += craigslist.search(c, sites, cfg.get("craigslist_queries", DEFAULT_CL_QUERIES), search_ceiling, crit.min_price, log)
-        if "reddit" in sources:
-            items += reddit.search(c, cfg.get("reddit_queries", DEFAULT_REDDIT_QUERIES), crit.min_price, log)
 
+    # Each site gets its own connection and runs at the same time; total time ~= the slowest site.
+    def run_ebay():
+        with make_client() as c:
+            return ebay.search(c, cfg.get("ebay_queries", ebay.DEFAULT_QUERIES), search_ceiling, crit.min_price, log)
+
+    def run_craigslist():
+        sites = args.cl_sites.split(",") if args.cl_sites else cfg.get("craigslist_sites", DEFAULT_CL_SITES)
+        with make_client() as c:
+            return craigslist.search(c, sites, cfg.get("craigslist_queries", DEFAULT_CL_QUERIES), search_ceiling, crit.min_price, log)
+
+    def run_reddit():
+        with make_client() as c:
+            return reddit.search(c, cfg.get("reddit_queries", DEFAULT_REDDIT_QUERIES), crit.min_price, log)
+
+    jobs = {"ebay": run_ebay, "craigslist": run_craigslist, "reddit": run_reddit}
+    with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
+        futures = {pool.submit(fn): name for name, fn in jobs.items() if name in sources}
+        for fut in as_completed(futures):
+            try:
+                items += fut.result()
+            except Exception as e:  # one broken site shouldn't sink the whole run
+                log(f"[{futures[fut]}] failed: {e!r}")
+
+    with make_client() as c:
         # De-duplicate across queries.
         uniq: dict[str, Listing] = {}
         for it in items:

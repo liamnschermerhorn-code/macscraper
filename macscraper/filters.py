@@ -264,12 +264,17 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
             price_known = False  # never a clean MATCH
         if item.shipping is None:
             reasons.append("shipping unknown")
+        if item.price_is_range:
+            reasons.append("listing has several configs/prices - lowest price may not be the 24/32GB one")
     if item.is_auction:
         if not c.allow_auctions:
             return reject("auction")
         reasons.append("auction - price will rise")
 
-    confirmed = chip_known and ram_known and price_known and not item.is_auction and not desc_flags
+    confirmed = (
+        chip_known and ram_known and price_known and item.shipping is not None
+        and not item.is_auction and not item.price_is_range and not desc_flags
+    )
     item.verdict = "MATCH" if confirmed else "POSSIBLE"
 
     # Score: cheaper and newer/bigger is better; unknowns cost points.

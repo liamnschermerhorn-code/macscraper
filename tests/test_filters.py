@@ -109,3 +109,9 @@ def test_parsers():
 
 def test_macbook_ranks_above_same_price_mini():
     assert ev("MacBook Air M2 24GB 512GB").score > ev("Mac mini M2 24GB 512GB").score
+
+
+def test_unknown_shipping_or_price_range_is_not_a_match():
+    assert ev("MacBook Air M2 24GB 512GB", shipping=None).verdict == "POSSIBLE"
+    it = ev("MacBook Air M2 24GB 512GB", price_is_range=True)
+    assert it.verdict == "POSSIBLE" and any("several configs" in r for r in it.reasons)

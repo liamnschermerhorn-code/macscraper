@@ -15,6 +15,7 @@ class Listing:
     description: str = ""  # body text / item specifics, when available
     is_auction: bool = False
     negotiable: bool = False  # eBay Best Offer, or a local/private sale
+    price_is_range: bool = False  # eBay "$450 to $900" listings with several configurations
     posted: str = ""
 
     # Filled in by filters.evaluate()

@@ -29,7 +29,7 @@ BIDS_RE = re.compile(r"\b\d+\s+bids?\b|\btime\s+left\b|\bending\b", re.I)
 LOCATION_RE = re.compile(r"(?:Located in|from)\s+([A-Z][\w .,'-]{2,40})")
 
 
-def search_url(query: str, max_price: float, min_price: float) -> str:
+def _base_search_url(query: str, max_price: float, min_price: float) -> str:
     params = {
         "_nkw": query,
         "_udlo": int(min_price),
@@ -75,7 +75,8 @@ def parse_search(html: str) -> list[Listing]:
         seen.add(url)
         text = card.get_text(" ", strip=True)
         price_el = card.select_one(".s-item__price, .s-card__price, [class*='price']")
-        price = parse_price(price_el.get_text(" ") if price_el else text)
+        price_text = price_el.get_text(" ") if price_el else text
+        price = parse_price(price_text)
         shipping = None
         if m := SHIP_RE.search(text):
             shipping = float(m.group(1).replace(",", ""))
@@ -94,6 +95,7 @@ def parse_search(html: str) -> list[Listing]:
                 location=loc.group(1).strip() if loc else "",
                 is_auction=bool(BIDS_RE.search(text)) and "buy it now" not in text.lower(),
                 negotiable="best offer" in text.lower(),
+                price_is_range=bool(re.search(r"\$[\d,.]+\s*to\s*\$", price_text)),
             )
         )
     return out
@@ -108,40 +110,73 @@ def _warm_up(client: httpx.Client) -> None:
     time.sleep(random.uniform(1.5, 3))
 
 
-def search_html(client: httpx.Client, queries: list[str], max_price: float, min_price: float, log) -> list[Listing]:
+# eBay's search box understands "(a,b)" as "a OR b", so a few broad searches cover every
+# chip/RAM combination. If eBay ever stops honoring that, FALLBACK_QUERIES spells them out.
+DEFAULT_QUERIES = [
+    "macbook (24gb,32gb)",
+    "mac mini (24gb,32gb)",
+    '(macbook,mac mini) (m2,m3,m4) ("24 gb","32 gb")',
+]
+FALLBACK_QUERIES = [
+    "macbook air m2 24gb", "macbook air m3 24gb", "macbook air m4 24gb", "macbook air m4 32gb",
+    "macbook pro m2 24gb", "macbook pro m2 pro 32gb", "macbook pro m3 24gb", "macbook pro m4 24gb",
+    "mac mini m2 24gb", "mac mini m2 pro 32gb", "mac mini m4 24gb", "mac mini m4 32gb",
+    "macbook 24gb", "macbook 32gb m2", "mac mini 24gb",
+]
+MAX_PAGES = 3  # 240 results per page, newest first
+
+
+def search_url(query: str, max_price: float, min_price: float, page: int = 1) -> str:
+    return _base_search_url(query, max_price, min_price) + (f"&_pgn={page}" if page > 1 else "")
+
+
+def _run(client: httpx.Client, queries: list[str], max_price: float, min_price: float, log) -> tuple[list[Listing], list[str]]:
+    """Fetch every query (following pages while they stay full). Returns results and still-blocked queries."""
     results: list[Listing] = []
-    _warm_up(client)
     headers = {"Referer": "https://www.ebay.com/"}
     pending = list(queries)
+    blocked: list[str] = []
     for round_ in range(2):  # second round retries whatever eBay blocked, after a long pause
-        failed = []
+        blocked = []
         for q in pending:
-            url = search_url(q, max_price, min_price)
-            try:
-                r = get(client, url, headers=headers, on_block=lambda: _warm_up(client))
-            except httpx.HTTPError as e:
-                status = getattr(getattr(e, "response", None), "status_code", None)
-                log(f"[ebay] {q!r}: blocked ({status or e}); will retry" if round_ == 0 else f"[ebay] {q!r}: still blocked ({status or e})")
-                failed.append(q)
-                time.sleep(random.uniform(10, 20))
-                continue
-            items = parse_search(r.text)
-            if not items and ("captcha" in r.text.lower() or "pardon our interruption" in r.text.lower()):
-                log(f"[ebay] {q!r}: bot check page; will retry")
-                failed.append(q)
-                continue
-            log(f"[ebay] {q!r}: {len(items)} results")
-            results.extend(items)
-            headers["Referer"] = url
-            time.sleep(random.uniform(3, 7))
-        if not failed:
+            for page in range(1, MAX_PAGES + 1):
+                url = search_url(q, max_price, min_price, page)
+                try:
+                    r = get(client, url, headers=headers, on_block=lambda: _warm_up(client))
+                except httpx.HTTPError as e:
+                    status = getattr(getattr(e, "response", None), "status_code", None)
+                    log(f"[ebay] {q!r} p{page}: blocked ({status or e})" + ("; will retry" if round_ == 0 else ""))
+                    blocked.append(q)
+                    time.sleep(random.uniform(10, 20))
+                    break
+                items = parse_search(r.text)
+                if not items and ("captcha" in r.text.lower() or "pardon our interruption" in r.text.lower()):
+                    log(f"[ebay] {q!r}: bot check page" + ("; will retry" if round_ == 0 else ""))
+                    blocked.append(q)
+                    break
+                log(f"[ebay] {q!r} p{page}: {len(items)} results")
+                results.extend(items)
+                headers["Referer"] = url
+                time.sleep(random.uniform(3, 6))
+                if len(items) < 200 or FEWER_WORDS_RE.search(r.text):
+                    break  # last page of real results
+        if not blocked:
             break
-        pending = failed
+        pending = blocked
         if round_ == 0:
-            log(f"[ebay] retrying {len(failed)} blocked searches in 60s...")
+            log(f"[ebay] retrying {len(blocked)} blocked searches in 60s...")
             time.sleep(60)
             _warm_up(client)
-    if pending and failed:
+    return results, blocked
+
+
+def search_html(client: httpx.Client, queries: list[str], max_price: float, min_price: float, log) -> list[Listing]:
+    _warm_up(client)
+    results, blocked = _run(client, queries, max_price, min_price, log)
+    if not results and not blocked and queries == DEFAULT_QUERIES:
+        log("[ebay] combined searches found nothing - falling back to one search per model")
+        results, blocked = _run(client, FALLBACK_QUERIES, max_price, min_price, log)
+    if blocked:
         log("[ebay] some searches stayed blocked - run again later, or set EBAY_CLIENT_ID/SECRET to use the API")
     return results
 
