@@ -40,7 +40,7 @@ def parse_posts(data: dict, min_price: float) -> list[Listing]:
         item = Listing(
             source="reddit/appleswap",
             title=have.group(1).strip(" -|,"),
-            url="https://www.reddit.com" + p.get("permalink", ""),
+            url=f"https://redd.it/{p['id']}" if p.get("id") else "https://www.reddit.com" + p.get("permalink", ""),
             price=min(prices) if prices else None,
             shipping=None,
             location=loc.group(1) if loc else "",

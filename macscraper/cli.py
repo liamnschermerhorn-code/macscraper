@@ -16,6 +16,7 @@ from urllib.parse import quote_plus
 import httpx
 from rich.console import Console
 from rich.table import Table
+from rich.text import Text
 
 from .filters import Criteria, evaluate
 from .http import client as make_client
@@ -172,8 +173,14 @@ needs checking. Before paying for anything: ask for a photo of <i>About This Mac
 def print_table(items: list[Listing], new_keys: set[str], limit: int) -> None:
     keep = [i for i in items if i.verdict != "REJECT"][:limit]
     t = Table(title="Candidates", show_lines=False)
-    for col in ("", "Total", "Chip", "RAM", "Title", "Source", "Notes"):
-        t.add_column(col)
+    t.add_column("", no_wrap=True)
+    t.add_column("Total", no_wrap=True)
+    t.add_column("Chip", no_wrap=True)
+    t.add_column("RAM", no_wrap=True)
+    t.add_column("Title", overflow="fold", ratio=2)
+    t.add_column("Notes", overflow="fold", ratio=1)
+    # Full URL, never wrapped or cut, so Cmd+click / copy works straight from the terminal.
+    t.add_column("Link", no_wrap=True, min_width=max((len(i.url) for i in keep), default=4))
     for i in keep:
         style = "green" if i.verdict == "MATCH" else "yellow"
         t.add_row(
@@ -181,9 +188,9 @@ def print_table(items: list[Listing], new_keys: set[str], limit: int) -> None:
             f"${i.total:,.0f}" if i.total is not None else "?",
             i.chip or "?",
             f"{i.ram_gb}GB" if i.ram_gb else "?",
-            f"[link={i.url}]{i.title[:70]}[/link]",
-            i.source,
+            i.title[:70],
             "; ".join(i.reasons)[:80],
+            Text(i.url, style=f"link {i.url}"),
             style=style,
         )
     Console().print(t)
