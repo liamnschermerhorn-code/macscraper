@@ -66,6 +66,28 @@ def comment_signals(data: list, op: str) -> list[str]:
     return found
 
 
+# Other things people sell in the same post; a price after one of these belongs to it, not the Mac.
+OTHER_ITEM_RE = re.compile(
+    r"apple\s*watch|\bwatch\b|\bipad|\biphone|airpods|\bipod|homepod|apple\s*tv|vision\s*pro|"
+    r"studio\s*display|pro\s*display|\bmonitor\b|magic\s*(keyboard|mouse|trackpad)|\bimac\b",
+    re.I,
+)
+
+
+def mac_prices(body: str, floor: float) -> list[float]:
+    """Prices that follow a Mac mention, before the post moves on to another item.
+    In "MacBook Pro ... $1550 OBO. Apple Watch ... $270", only $1550 belongs to the Mac."""
+    text = STRIKE_RE.sub("", body)  # crossed-out items are sold; ignore their prices
+    found = []
+    for mac in MAC_RE.finditer(text):
+        nxt = OTHER_ITEM_RE.search(text, mac.end())
+        end = nxt.start() if nxt else len(text)
+        m = PRICE_RE.search(text, mac.end(), end)
+        if m and (v := float(m.group(1).replace(",", ""))) >= floor:
+            found.append(v)
+    return found
+
+
 def _prices(text: str, floor: float) -> list[float]:
     vals = []
     for m in PRICE_RE.finditer(text):
@@ -92,7 +114,7 @@ def parse_posts(data: dict, min_price: float) -> list[Listing]:
         status = body_sold_status(body)
         if status == "all":
             continue
-        prices = _prices(have.group(1), min_price) or _prices(body, min_price)
+        prices = _prices(have.group(1), min_price) or mac_prices(body, min_price) or _prices(body, min_price)
         loc = LOC_RE.search(title)
         item = Listing(
             source="reddit/appleswap",

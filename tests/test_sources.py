@@ -128,3 +128,24 @@ def test_reddit_comment_signals():
     assert any("bot" in s for s in sig)
     assert reddit.comment_signals([{}, {"data": {"children": [
         {"data": {"author": "seller1", "body": "Nope, still available!"}}]}}], "seller1") == []
+
+
+def test_price_parsing_without_commas():
+    from macscraper.http import parse_price
+    assert parse_price("$1550 + shipping OBO") == 1550.0
+    assert parse_price("$1550.50") == 1550.5
+    assert parse_price("$1,550.00") == 1550.0
+    assert parse_price("$650") == 650.0
+    assert parse_price("US $499.00") == 499.0
+
+
+def test_reddit_price_belongs_to_the_mac():
+    body = ("16-inch M3 Pro MacBook Pro, running macOS Sonoma, keyboard and 12 battery cycles.\n\n"
+            "$1550 + shipping OBO.\n\nEach MacBook sale includes the charger, packed for shipping.\n\n"
+            "46mm Apple Watch Series 10, scratches on the screen, no damage.\n\n$270 + shipping OBO.")
+    assert reddit.mac_prices(body, 150) == [1550.0]
+    d = _post(body)
+    d["data"]["children"][0]["data"]["title"] = "[USA-IN] [H] MacBook Pro M3 Pro, Apple Watch [W] PayPal"
+    (it,) = reddit.parse_posts(d, 150)
+    assert it.price == 1550.0
+    assert reddit.mac_prices("~~MacBook Air M2 - $500~~\nMacBook Air M2 24GB - $640", 150) == [640.0]
