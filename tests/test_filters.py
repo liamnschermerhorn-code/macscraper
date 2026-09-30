@@ -16,7 +16,7 @@ def ev(title, price=600.0, shipping=0.0, **kw):
         "Apple MacBook Air 13.6\" M2 24GB RAM 512GB SSD Midnight",
         "Mac mini M4 24GB 512GB - excellent",
         "MacBook Pro 14 M2 Pro 32GB 1TB Space Gray",
-        "Apple iMac 24\" M3 8-core 24 GB unified memory 1TB",
+        "Apple MacBook Air 15\" M3 8-core 24 GB unified memory 1TB",
         "MacBook Air M2 24GB 1TB - iCloud unlocked, no MDM, no damage",
         "Mac mini M2 24gb/256gb with charger and box",
     ],
@@ -44,6 +44,8 @@ def test_matches(title):
         ("WTB MacBook Air M2 24GB", "wanted"),
         ("Samsung M.2 NVMe SSD 1TB", "not a Mac"),
         ("Mac mini 2020 16GB", "M1 or Intel"),
+        ("Apple iMac 24\" M3 24GB 1TB", "imac not wanted"),
+        ("Mac Studio M2 Max 32GB", "mac studio not wanted"),
         ("MacBook Pro 16 2021 32GB", "M1 or Intel"),
     ],
 )
@@ -103,3 +105,7 @@ def test_parsers():
     assert red_flags("no scratches, no dents, not locked, never repaired") == []
     assert red_flags("activation lock is off, MDM free") == []
     assert red_flags("iCloud locked") == ["icloud locked"]
+
+
+def test_macbook_ranks_above_same_price_mini():
+    assert ev("MacBook Air M2 24GB 512GB").score > ev("Mac mini M2 24GB 512GB").score

@@ -1,13 +1,13 @@
 # macscraper
 
-Searches eBay, Craigslist and r/appleswap for an **Apple Silicon Mac (M2/M3/M4, any variant) with 24 or 32 GB RAM,
+Searches eBay, Craigslist and r/appleswap for an **Apple Silicon MacBook or Mac mini (M2/M3/M4, any variant) with 24 or 32 GB RAM,
 fully working, ≤ $700 delivered**. It sorts every listing into:
 
 | Verdict | Meaning |
 |---|---|
 | **MATCH** | Chip, RAM and price all confirmed from the listing, no red flags |
 | **POSSIBLE** | Nothing disqualifying, but something needs checking (RAM not stated, auction, Best Offer slightly over budget, a warning word in the description) |
-| **REJECT** | Wrong chip/RAM, over budget, accessory, Intel/M1 model year, or a red flag: locked / iCloud / MDM / parts / as-is / cracked / water / won't boot, etc. Phrases like "not locked" or "no damage" are recognized as fine. |
+| **REJECT** | iMac/Mac Studio, wrong chip/RAM, over budget, accessory, Intel/M1 model year, or a red flag: locked / iCloud / MDM / parts / as-is / cracked / water / won't boot, etc. Phrases like "not locked" or "no damage" are recognized as fine. |
 
 ## Run it (on your Mac)
 

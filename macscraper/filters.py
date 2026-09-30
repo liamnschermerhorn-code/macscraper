@@ -26,11 +26,22 @@ class Criteria:
     # Negotiable listings up to this much over budget are kept as POSSIBLE ("make an offer").
     offer_stretch: float = 75.0
     extra_red_flags: list[str] = field(default_factory=list)
+    # Which kinds of Mac to keep: any of "macbook", "mac mini", "imac", "mac studio".
+    models: tuple[str, ...] = ("macbook", "mac mini")
+    # Score penalty for Mac minis, so MacBooks rank first at a similar price. 0 = treat equally.
+    mini_penalty: int = 5
     # Keep listings that state neither chip nor RAM (lots of noise, occasionally a steal).
     loose: bool = False
 
 
 MAC_RE = re.compile(r"\b(mac\s?book|macbook|mac\s?mini|imac|mac\s?studio)\b", re.I)
+
+MODEL_RES = {
+    "macbook": re.compile(r"\bmac\s?book", re.I),
+    "mac mini": re.compile(r"\bmac\s?mini\b", re.I),
+    "imac": re.compile(r"\bimac\b", re.I),
+    "mac studio": re.compile(r"\bmac\s?studio\b", re.I),
+}
 
 # "M2", "M3 Pro", "Apple M4 Max" ... but not "M.2" (SSD form factor) or "M2 NVMe"/"M.2 SSD".
 CHIP_RE = re.compile(r"(?<![\w.])m\s?([1-5])(?:\s?(pro|max|ultra))?(?![\w.])", re.I)
@@ -170,6 +181,10 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
         return reject("wanted/ISO post, not a sale")
     if not MAC_RE.search(text):
         return reject("not a Mac")
+    kinds = {k for k, rx in MODEL_RES.items() if rx.search(title)} or {k for k, rx in MODEL_RES.items() if rx.search(text)}
+    if kinds and not kinds & set(c.models):
+        return reject(f"{'/'.join(sorted(kinds))} not wanted")
+    is_mini = kinds == {"mac mini"}
     if FOR_MAC_RE.search(title) or ACCESSORY_RE.search(title) and not re.search(r"\bwith\b|\bw/|\bincl", title, re.I):
         return reject("looks like an accessory/part")
 
@@ -268,6 +283,7 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
     score -= 0 if ram_known else 20
     score -= 10 if item.is_auction else 0
     score -= 25 if desc_flags else 0
+    score -= c.mini_penalty if is_mini else 0
     item.score = score
     item.reasons = reasons
     return item

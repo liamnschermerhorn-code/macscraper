@@ -28,10 +28,9 @@ DEFAULT_EBAY_QUERIES = [
     "macbook air m2 24gb", "macbook air m3 24gb", "macbook air m4 24gb", "macbook air m4 32gb",
     "macbook pro m2 24gb", "macbook pro m2 pro 32gb", "macbook pro m3 24gb", "macbook pro m4 24gb",
     "mac mini m2 24gb", "mac mini m2 pro 32gb", "mac mini m4 24gb", "mac mini m4 32gb",
-    "imac m3 24gb", "imac m4 24gb", "imac m4 32gb",
-    "macbook 24gb", "macbook 32gb m2", "mac mini 24gb", "imac 24gb",
+    "macbook 24gb", "macbook 32gb m2", "mac mini 24gb",
 ]
-DEFAULT_CL_QUERIES = ["macbook", "mac mini", "imac"]
+DEFAULT_CL_QUERIES = ["macbook", "mac mini"]
 DEFAULT_REDDIT_QUERIES = ["24GB", "32GB", "M2", "M3", "M4"]
 DEFAULT_CL_SITES = ["sfbay", "losangeles", "newyork", "chicago", "seattle", "boston"]
 
@@ -142,7 +141,7 @@ tr.match{{background:var(--match)}}tr.possible{{background:var(--poss)}}small{{c
 .wrap{{overflow-x:auto}}
 </style>
 <h1>Mac deal hunt</h1>
-<p>M2/M3/M4 · {"/".join(str(r) for r in crit.ram_options)}GB RAM · ≤ ${crit.max_total:.0f} delivered · fully working.
+<p>MacBook / Mac mini · M2/M3/M4 · {"/".join(str(r) for r in crit.ram_options)}GB RAM · ≤ ${crit.max_total:.0f} delivered · fully working.
 Generated {datetime.now():%Y-%m-%d %H:%M}. <b>{sum(i.verdict == "MATCH" for i in items)}</b> matches,
 <b>{sum(i.verdict == "POSSIBLE" for i in items)}</b> possibles, {len(rejects)} rejected.</p>
 <p><small>MATCH = chip, RAM and price confirmed from the listing, no red flags. POSSIBLE = nothing disqualifying but something
@@ -248,6 +247,8 @@ def main(argv: list[str] | None = None) -> None:
         offer_stretch=pick(args.stretch, "offer_stretch", 75.0),
         chips=tuple(cfg.get("chips", ("M2", "M3", "M4"))),
         ram_options=tuple(cfg.get("ram_options", (24, 32))),
+        models=tuple(m.lower() for m in cfg.get("models", ("macbook", "mac mini"))),
+        mini_penalty=cfg.get("mini_penalty", 5),
         allow_auctions=not (args.no_auctions or cfg.get("no_auctions", False)),
         extra_red_flags=cfg.get("extra_red_flags", []),
         loose=args.loose or cfg.get("loose", False),
