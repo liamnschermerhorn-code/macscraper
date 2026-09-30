@@ -21,6 +21,11 @@ def client() -> httpx.Client:
             "User-Agent": random.choice(USER_AGENTS),
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-User": "?1",
         },
         follow_redirects=True,
         timeout=25,
@@ -28,13 +33,17 @@ def client() -> httpx.Client:
     )
 
 
-def get(c: httpx.Client, url: str, *, retries: int = 2, **kw) -> httpx.Response:
+def get(c: httpx.Client, url: str, *, retries: int = 2, on_block=None, **kw) -> httpx.Response:
+    """GET with retries. 403/429/503 usually mean "slow down", so those back off harder
+    (and call `on_block`, e.g. to re-visit the homepage for fresh cookies) before retrying."""
     last: Exception | None = None
     for attempt in range(retries + 1):
         try:
             r = c.get(url, **kw)
-            if r.status_code in (429, 503) and attempt < retries:
-                time.sleep(3 * (attempt + 1))
+            if r.status_code in (403, 429, 503) and attempt < retries:
+                time.sleep(random.uniform(8, 15) * (attempt + 1))
+                if on_block:
+                    on_block()
                 continue
             r.raise_for_status()
             return r

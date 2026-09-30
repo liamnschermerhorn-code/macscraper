@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import base64
 import os
+import random
 import re
+import time
 from urllib.parse import urlencode
 
 import httpx
 from bs4 import BeautifulSoup
 
-from ..http import get, parse_price, polite_pause
+from ..http import get, parse_price
 from ..models import Listing
 
 # New, Open box, Certified/Excellent/Very good/Good/Seller refurbished, Used. Excludes "For parts" (7000).
@@ -47,8 +49,14 @@ def _clean_title(t: str) -> str:
     return re.sub(r"\s+", " ", t).strip()
 
 
+FEWER_WORDS_RE = re.compile(r"Results matching fewer words|Results for fewer words", re.I)
+
+
 def parse_search(html: str) -> list[Listing]:
     """Handles both the classic `s-item` and the 2025+ `s-card` result markup."""
+    # eBay pads short result lists with loosely related items; drop everything after that divider.
+    if m := FEWER_WORDS_RE.search(html):
+        html = html[: m.start()]
     soup = BeautifulSoup(html, "html.parser")
     cards = soup.select("li.s-item, li.s-card, li[data-listingid], div.s-item")
     out: list[Listing] = []
@@ -91,21 +99,50 @@ def parse_search(html: str) -> list[Listing]:
     return out
 
 
+def _warm_up(client: httpx.Client) -> None:
+    """Visit the homepage like a browser would, so eBay hands out its session cookies."""
+    try:
+        client.get("https://www.ebay.com/", headers={"Sec-Fetch-Site": "none"})
+    except httpx.HTTPError:
+        pass
+    time.sleep(random.uniform(1.5, 3))
+
+
 def search_html(client: httpx.Client, queries: list[str], max_price: float, min_price: float, log) -> list[Listing]:
     results: list[Listing] = []
-    for q in queries:
-        url = search_url(q, max_price, min_price)
-        try:
-            r = get(client, url)
-        except httpx.HTTPError as e:
-            log(f"[ebay] {q!r}: {e}")
-            continue
-        items = parse_search(r.text)
-        if not items and ("captcha" in r.text.lower() or "pardon our interruption" in r.text.lower()):
-            log("[ebay] got a bot check page - slow down, or set EBAY_CLIENT_ID/SECRET to use the API")
-        log(f"[ebay] {q!r}: {len(items)} results")
-        results.extend(items)
-        polite_pause()
+    _warm_up(client)
+    headers = {"Referer": "https://www.ebay.com/"}
+    pending = list(queries)
+    for round_ in range(2):  # second round retries whatever eBay blocked, after a long pause
+        failed = []
+        for q in pending:
+            url = search_url(q, max_price, min_price)
+            try:
+                r = get(client, url, headers=headers, on_block=lambda: _warm_up(client))
+            except httpx.HTTPError as e:
+                status = getattr(getattr(e, "response", None), "status_code", None)
+                log(f"[ebay] {q!r}: blocked ({status or e}); will retry" if round_ == 0 else f"[ebay] {q!r}: still blocked ({status or e})")
+                failed.append(q)
+                time.sleep(random.uniform(10, 20))
+                continue
+            items = parse_search(r.text)
+            if not items and ("captcha" in r.text.lower() or "pardon our interruption" in r.text.lower()):
+                log(f"[ebay] {q!r}: bot check page; will retry")
+                failed.append(q)
+                continue
+            log(f"[ebay] {q!r}: {len(items)} results")
+            results.extend(items)
+            headers["Referer"] = url
+            time.sleep(random.uniform(3, 7))
+        if not failed:
+            break
+        pending = failed
+        if round_ == 0:
+            log(f"[ebay] retrying {len(failed)} blocked searches in 60s...")
+            time.sleep(60)
+            _warm_up(client)
+    if pending and failed:
+        log("[ebay] some searches stayed blocked - run again later, or set EBAY_CLIENT_ID/SECRET to use the API")
     return results
 
 

@@ -68,3 +68,10 @@ def test_reddit():
     assert "MacBook Air M2 24GB/512GB" in titles
     assert len(items) == 2  # SOLD dropped; the "[H] PayPal" post kept but has no Mac
     assert items[0].price == 640.0
+
+
+def test_ebay_drops_fewer_words_section():
+    html = EBAY_CLASSIC.replace("</ul>", "") + '<li class="srp-river-answer">Results matching fewer words</li>' + \
+        '<li class="s-item"><a href="https://www.ebay.com/itm/999"><div class="s-item__title">MacBook Air M1 8GB</div></a>' + \
+        '<span class="s-item__price">$400.00</span></li></ul>'
+    assert [i.url for i in ebay.parse_search(html)] == ["https://www.ebay.com/itm/256356759063"]
