@@ -4,3 +4,4 @@ __pycache__/
 results/
 .seen.json
 config.toml
+*.zip
