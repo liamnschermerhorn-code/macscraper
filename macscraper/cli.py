@@ -22,7 +22,7 @@ from .filters import SHIP_REJECT, Criteria, evaluate
 from .http import client as make_client
 from .http import polite_pause
 from .models import Listing
-from . import ocr
+from . import ocr, rejected
 from .sources import craigslist, ebay, reddit
 
 console = Console(stderr=True)
@@ -126,6 +126,8 @@ def collect(args, cfg: dict, crit: Criteria) -> list[Listing]:
         for it in items:
             uniq.setdefault(it.key, it)
         items = [evaluate(it, crit) for it in uniq.values()]
+        if n_mine := apply_user_rejections(items, Path(getattr(args, "out", "results")) / "rejected.json"):
+            log(f"{n_mine} listing(s) hidden because you rejected them before")
 
         # Reddit: read the comments of posts that pass every other check for "sold"/"pending".
         reddit_check = [it for it in items if it.source.startswith("reddit") and it.verdict != "REJECT"]
@@ -183,6 +185,23 @@ def collect(args, cfg: dict, crit: Criteria) -> list[Listing]:
         if args.ocr:
             read_photos_step(c, items, crit, args, log)
     return items
+
+
+def apply_user_rejections(items: list[Listing], path: Path | None) -> int:
+    """Hide listings you rejected by hand in an earlier run (they keep their old verdict inside `meta`,
+    so the results screen can bring one back)."""
+    mine = rejected.load(path)
+    n = 0
+    for it in items:
+        if it.key in mine and it.verdict != "REJECT":
+            was = it.verdict
+            note = mine[it.key].get("reason")
+            it.meta["orig"] = (it.verdict, list(it.reasons), it.score)
+            it.meta["user_rejected"] = True
+            it.verdict, it.score = "REJECT", -100
+            it.reasons = [f"rejected by you (was {was})" + (f": {note}" if note else "")]
+            n += 1
+    return n
 
 
 def fetch_page(c: httpx.Client, it: Listing, log) -> bool:
@@ -370,7 +389,12 @@ def run_once(args, cfg: dict, crit: Criteria) -> None:
     if interactive and any(i.verdict != "REJECT" for i in items):
         from .tui import ResultsApp
 
-        ResultsApp(items, new_keys, str(report)).run()  # live screen; resize the window and it reflows
+        app = ResultsApp(items, new_keys, str(report), rejected_path=Path(args.out) / "rejected.json")
+        app.run()  # live screen; resize the window and it reflows
+        if app.changed:  # you rejected or restored something: bring the saved report in line
+            report = write_outputs(items, Path(args.out), crit, new_keys)
+            for line in app.rejection_summary():
+                console.print(line)
     else:
         print_table(items, new_keys, args.limit)
     console.log(
@@ -432,6 +456,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--ocr", action="store_true", default=None, help="read the text in listing photos (slower; Apple Vision on a Mac)")
     p.add_argument("--no-ocr", dest="ocr", action="store_false", help="don't read photos even if settings.toml turns it on")
     p.add_argument("--ocr-max-images", type=int, default=None, help="photos to read per listing (default 6)")
+    p.add_argument("--reject", metavar="URL", help="reject a listing by its link; remembered for future runs")
+    p.add_argument("--unreject", metavar="URL", help="take a listing back off your rejected list")
+    p.add_argument("--why", default="", help="a note to go with --reject")
     p.add_argument("--no-tui", action="store_true", help="print a plain table instead of the live, resizable results screen")
     p.add_argument("--no-ask", action="store_true", help="don't ask questions at startup; use config/defaults")
     p.add_argument("--strict", action="store_true", help="drop listings that state neither chip nor RAM (default: keep them as POSSIBLE)")
@@ -442,6 +469,16 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--out", default="results")
     p.add_argument("--limit", type=int, default=60, help="rows to print in the terminal")
     args = p.parse_args(argv)
+
+    if args.reject or args.unreject:
+        path = Path(args.out) / "rejected.json"
+        if args.reject:
+            rejected.add_url(path, args.reject, args.why)
+            console.print(f"Rejected {args.reject} - it won't show up again.")
+        if args.unreject:
+            ok = rejected.remove(path, args.unreject)
+            console.print("Taken off your rejected list." if ok else "That link wasn't on your rejected list.")
+        return
 
     cfg = load_config(args.config)
     args.sources = args.sources or ",".join(cfg.get("sources", ["ebay", "craigslist", "reddit"]))

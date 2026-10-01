@@ -41,8 +41,15 @@ uv run macscraper --strict                   # drop listings that state neither 
 
 When the run finishes you get a live results screen that reflows as you resize the window (wide: list plus a
 detail pane; narrow: the detail pane drops underneath). Keys: **↑/↓** move, **Enter** or **o** open the link,
-**c** copy it, **m** matches only, **r** show rejected listings (with the reason), **q** quit. `--no-tui` (or
+**c** copy it, **m** matches only, **x** reject the highlighted listing (see below), **u** undo, **r** show rejected
+listings (with the reason), **q** quit. `--no-tui` (or
 `--watch`, or piping the output) prints a plain table instead; `results/report.html` is written either way.
+
+**Rejecting by hand.** When the detector lets through something that isn't right, press **x** on it. It disappears,
+and it stays gone on later runs (saved in `results/rejected.json`, keyed by the listing's link). **u** undoes the
+last rejection; press **r** to see everything rejected, and **x** on one you rejected earlier brings it back. When you
+quit, it prints what you rejected: paste those lines to Claude and each one becomes a new rule, so the detector
+catches that kind of listing itself next time. Without the screen: `--reject URL [--why "..."]` / `--unreject URL`.
 
 `results/seen.json` remembers what you've already seen, so the report and alerts mark only new listings as **NEW**.
 

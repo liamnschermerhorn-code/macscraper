@@ -4,6 +4,7 @@ pane moves from beside the list to beneath it on narrow windows."""
 from __future__ import annotations
 
 import webbrowser
+from pathlib import Path
 
 from rich.text import Text
 from textual import events
@@ -12,6 +13,7 @@ from textual.binding import Binding
 from textual.containers import Container
 from textual.widgets import DataTable, Footer, Header, Static
 
+from . import rejected
 from .models import Listing
 
 VERDICT_STYLE = {"MATCH": "bold green", "POSSIBLE": "yellow", "REJECT": "dim red"}
@@ -46,15 +48,20 @@ class ResultsApp(App):
         Binding("o", "open", "Open link"),
         Binding("c", "copy", "Copy link"),
         Binding("m", "matches_only", "Matches only"),
+        Binding("x", "reject", "Reject this"),
+        Binding("u", "undo", "Undo reject"),
         Binding("r", "rejected", "Show rejected"),
         Binding("q", "quit", "Quit"),
     ]
 
-    def __init__(self, items: list[Listing], new_keys: set[str], report: str = "") -> None:
+    def __init__(self, items: list[Listing], new_keys: set[str], report: str = "", rejected_path: Path | None = None) -> None:
         super().__init__()
         self.items = items
         self.new_keys = new_keys
         self.report = report
+        self.rejected_path = rejected_path  # where your rejections are remembered (None: not saved)
+        self.changed = False                # you rejected or restored something this session
+        self.undo_stack: list[Listing] = []
         self.matches_only = False
         self.show_rejected = False
         self.by_key: dict[str, Listing] = {}
@@ -188,6 +195,71 @@ class ResultsApp(App):
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         self.action_open()
+
+    # ------------------------------------------------------------------ rejecting by hand
+    def _reject(self, it: Listing) -> None:
+        it.meta["orig"] = (it.verdict, list(it.reasons), it.score)
+        it.meta["user_rejected"] = True
+        was = it.verdict
+        it.verdict, it.reasons, it.score = "REJECT", [f"rejected by you (was {was})"], -100
+        rejected.add(self.rejected_path, it, was)
+
+    def _restore(self, it: Listing) -> None:
+        it.verdict, it.reasons, it.score = it.meta.pop("orig")
+        it.meta.pop("user_rejected", None)
+        rejected.remove(self.rejected_path, it.key)
+
+    def _redraw_keeping_place(self, row: int) -> None:
+        self.rebuild()
+        table = self.query_one("#list", DataTable)
+        if table.row_count:
+            table.move_cursor(row=min(row, table.row_count - 1))
+        self._show_details()
+
+    def action_reject(self) -> None:
+        """Reject the highlighted listing (the detector missed that it's wrong). Press again on a listing
+        you rejected earlier (view them with r) to bring it back."""
+        it = self.current()
+        table = self.query_one("#list", DataTable)
+        if it is None:
+            return
+        row = table.cursor_row
+        if it.meta.get("user_rejected"):
+            self._restore(it)
+            self.notify("Restored")
+        elif it.verdict == "REJECT":
+            self.notify(f"The detector already rejected this: {it.reasons[0] if it.reasons else ''}")
+            return
+        else:
+            self._reject(it)
+            self.undo_stack.append(it)
+            self.notify("Rejected - it won't come back. Press u to undo.")
+        self.changed = True
+        self._redraw_keeping_place(row)
+
+    def action_undo(self) -> None:
+        while self.undo_stack:
+            it = self.undo_stack.pop()
+            if it.meta.get("user_rejected"):
+                self._restore(it)
+                self.changed = True
+                self.rebuild()
+                table = self.query_one("#list", DataTable)
+                if it.key in self.by_key:
+                    table.move_cursor(row=table.get_row_index(it.key))
+                self.notify("Restored")
+                return
+        self.notify("Nothing to undo")
+
+    def rejection_summary(self) -> list[str]:
+        """What you rejected this session, for pasting back to improve the detector."""
+        mine = [i for i in self.items if i.meta.get("user_rejected") and i.meta.get("orig")]
+        if not mine:
+            return []
+        lines = [f"You rejected {len(mine)} listing(s) (saved in {self.rejected_path}):"]
+        for i in mine:
+            lines.append(f"  was {i.meta['orig'][0]:<8} {i.title[:90]}  {i.url}")
+        return lines
 
     # ------------------------------------------------------------------ actions
     def action_open(self) -> None:
