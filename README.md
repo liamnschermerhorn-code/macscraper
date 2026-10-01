@@ -5,7 +5,7 @@ fully working, ≤ $700 delivered** (change `max_total` in `settings.toml`). It 
 
 | Verdict | Meaning |
 |---|---|
-| **MATCH** | Chip, RAM and price all confirmed from the listing, no red flags. A negotiable listing (Best Offer / local) a little over budget counts too, with a "make an offer" note |
+| **MATCH** | Chip, RAM and price all confirmed, the **description read** and clean, no red flags. A negotiable listing (Best Offer / local) a little over budget counts too, with a "make an offer" note |
 | **POSSIBLE** | Nothing disqualifying, but something needs checking (chip and/or RAM not stated - just ask the seller, auction, shipping unknown, a warning word in the description) |
 | **REJECT** | iMac, wrong chip/RAM, over budget, accessory, Intel/M1 model year, or a red flag: locked / iCloud / MDM / parts / as-is / cracked / water / won't boot, etc. Phrases like "not locked" or "no damage" are recognized as fine. |
 
@@ -31,7 +31,7 @@ Include flexible prices? (Best Offer / local listings a bit over $700 you could 
 Useful flags:
 
 ```sh
-uv run macscraper --deep                     # open each candidate page to read specs + seller description (slower, better)
+uv run macscraper --no-deep                  # titles only: faster, but descriptions aren't read (the default is to read them)
 uv run macscraper --watch 20 --ntfy my-topic # re-check every 20 min, push NEW matches to your phone (ntfy app)
 uv run macscraper --cl-sites sfbay,sacramento
 uv run macscraper --stretch 0 --no-auctions  # strictly ≤ budget, fixed price only (no questions)
@@ -53,6 +53,17 @@ quit, it prints what you rejected: paste those lines to Claude and each one beco
 catches that kind of listing itself next time. Without the screen: `--reject URL [--why "..."]` / `--unreject URL`.
 
 `results/seen.json` remembers what you've already seen, so the report and alerts mark only new listings as **NEW**.
+
+### Descriptions
+
+By default the scraper opens every candidate listing and reads the seller's description (and eBay's item specifics, like
+"Processor" and "RAM Size"), not just the title. A description that says the Mac is broken or locked ("for parts",
+"iCloud locked", "won't turn on", "cracked screen", "water damage", "bad logic board"...) rejects the listing, unless the
+same sentence says the opposite ("we never sell iCloud locked items", "Activation Lock is off"). A description that
+disagrees with the title (24GB in the title, 16GB in the text) is flagged for you to read. A **MATCH needs its description
+read**: if a page couldn't be fetched (eBay refuses some), the listing stays POSSIBLE with "description not read yet".
+The results screen shows what the seller wrote. `--no-deep` skips all of this for speed; `require_description = false`
+in `settings.toml` lets unread listings be MATCH.
 
 ### Settings
 

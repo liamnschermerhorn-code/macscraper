@@ -273,3 +273,22 @@ def test_chip_order_variants_and_other_columns():
         # sorting never loses or duplicates anything
         assert sorted(i.key for i in app.visible()) == sorted(i.key for i in items)
     run(go())
+
+
+def test_details_pane_shows_what_the_seller_wrote():
+    items = make_items()
+    items[0].description = "Clean machine, original owner. [photo text] Chip Apple M2 | Memory 24 GB"
+    items[0].description_checked = True
+    items[1].description_checked = False
+
+    async def go():
+        app = ResultsApp(items, set(), "")
+        async with app.run_test(size=(140, 40)) as pilot:
+            await pilot.pause()
+            first = str(app.query_one("#details").render())
+            assert "Seller's description:" in first and "Clean machine, original owner." in first
+            assert "Chip Apple M2" not in first                    # text read from photos isn't passed off as the seller's words
+            await pilot.press("down")
+            await pilot.pause()
+            assert "Description not read" in str(app.query_one("#details").render())
+    run(go())

@@ -185,7 +185,7 @@ def collect(args, cfg: dict, crit: Criteria) -> list[Listing]:
 
         if args.deep:
             todo = [it for it in items if it.verdict != "REJECT" and not it.description]
-            log(f"deep-checking {len(todo)} candidate pages...")
+            log(f"reading the descriptions of {len(todo)} candidate listings...")
             reopen_all(todo)
 
         if args.ocr:
@@ -219,6 +219,7 @@ def fetch_page(c: httpx.Client, it: Listing, log) -> bool:
     else:
         return False
     it.description = text
+    it.description_checked = True
     it.images = images or it.images  # keep the search-result photo if the page shows none
     return True
 
@@ -514,7 +515,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--no-tui", action="store_true", help="print a plain table instead of the live, resizable results screen")
     p.add_argument("--no-ask", action="store_true", help="don't ask questions at startup; use config/defaults")
     p.add_argument("--strict", action="store_true", help="drop listings that state neither chip nor RAM (default: keep them as POSSIBLE)")
-    p.add_argument("--deep", action="store_true", help="open each candidate's page to read specs/description")
+    p.add_argument("--deep", action="store_true", default=None, help="read each candidate listing's description (the default)")
+    p.add_argument("--no-deep", dest="deep", action="store_false", help="titles only: faster, but descriptions aren't checked")
     p.add_argument("--watch", type=float, default=0, help="re-run every N minutes")
     p.add_argument("--ntfy", default=None, help="ntfy.sh topic for phone alerts on new matches")
     p.add_argument("--notify-possible", action="store_true", help="also alert on POSSIBLE listings")
@@ -535,7 +537,7 @@ def main(argv: list[str] | None = None) -> None:
     cfg = load_config(args.config)
     args.sources = args.sources or ",".join(cfg.get("sources", ["ebay", "craigslist", "reddit"]))
     args.ntfy = args.ntfy or cfg.get("ntfy_topic")
-    args.deep = args.deep or cfg.get("deep", False)
+    args.deep = cfg.get("deep", True) if args.deep is None else args.deep
     args.ocr = cfg.get("ocr", False) if args.ocr is None else args.ocr
     args.ocr_max_images = args.ocr_max_images or cfg.get("ocr_max_images", 6)
     pick = lambda cli, key, default: cli if cli is not None else cfg.get(key, default)  # noqa: E731
@@ -551,6 +553,7 @@ def main(argv: list[str] | None = None) -> None:
         extra_red_flags=cfg.get("extra_red_flags", []),
         loose=False if args.strict else cfg.get("loose", True),
         stale_days=cfg.get("stale_days", 10),
+        require_description=cfg.get("require_description", True),
         fb_city=cfg.get("facebook_city", "chicago"),
     )
     if not args.no_ask and sys.stdin.isatty():

@@ -164,6 +164,7 @@ def parse_posts(data: dict, min_price: float) -> list[Listing]:
             item.sold_note = "part of this post is crossed out / marked sold - make sure the Mac isn't"
         if p.get("created_utc"):
             item.age_days = (time.time() - float(p["created_utc"])) / 86400
+        item.description_checked = True  # the post text is the description
         item.images = post_images(p)
         item.meta = {"id": p.get("id", ""), "author": p.get("author", ""), "n_prices": len(set(prices))}
         if len(set(prices)) > 1:

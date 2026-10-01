@@ -150,3 +150,53 @@ def test_blocked_search_page_is_retried_from_that_page_not_from_page_one(monkeyp
     pages = [u.split("_pgn=")[1][0] if "_pgn=" in u else "1" for u in requested]
     assert pages == ["1", "2", "3", "3"]            # page 3 retried; pages 1-2 not downloaded again
     assert len(results) == 600 and blocked == []
+
+
+# ---- descriptions are read by default ------------------------------------------------------------------
+
+def _collect_with_fake_craigslist(monkeypatch, deep, pages):
+    from macscraper.sources import craigslist as cl
+
+    def fake_search(*a, **k):
+        mk = lambda n, title: Listing(source="craigslist/chicago", title=title, url=f"https://chicago.craigslist.org/x/{n}.html",
+                                      price=500, shipping=0.0, negotiable=True)
+        return [mk(1, "MacBook Air M2 24GB 512GB"), mk(2, "MacBook Pro M2 24GB 1TB"), mk(3, "MacBook Air M2 24GB 256GB")]
+
+    def fake_page(client, url):
+        body = pages[url.split("/")[-1]]
+        if isinstance(body, Exception):
+            raise body
+        return body, []
+
+    monkeypatch.setattr(cli.craigslist, "search", fake_search)
+    monkeypatch.setattr(cli.craigslist, "item_page", fake_page)
+    monkeypatch.setattr(cli, "polite_pause", lambda: None)
+    args = argparse.Namespace(sources="craigslist", cl_sites="chicago", deep=deep, ocr=False, import_paths=[], out="/nonexistent")
+    return {i.url.split("/")[-1]: i for i in cli.collect(args, {}, Criteria(max_total=700, require_description=True))}
+
+
+def test_descriptions_are_read_for_every_candidate_by_default(monkeypatch):
+    import httpx
+
+    pages = {"1.html": "Clean, works perfectly, original owner. Apple M2, 24GB.",
+             "2.html": "Selling because it is iCloud locked, I forgot the password.",
+             "3.html": httpx.ConnectError("blocked")}
+    got = _collect_with_fake_craigslist(monkeypatch, True, pages)
+    assert got["1.html"].verdict == "MATCH" and got["1.html"].description_checked
+    assert got["2.html"].verdict == "REJECT" and "description says: icloud locked" in got["2.html"].reasons[0]
+    assert got["3.html"].verdict == "POSSIBLE" and not got["3.html"].description_checked        # the page couldn't be read...
+    assert any("description not read yet" in r for r in got["3.html"].reasons)                  # ...and it says so
+
+
+def test_titles_only_mode_never_reaches_match_when_descriptions_are_required(monkeypatch):
+    got = _collect_with_fake_craigslist(monkeypatch, False, {"1.html": "never fetched"})
+    assert {i.verdict for i in got.values()} == {"POSSIBLE"} and not any(i.description_checked for i in got.values())
+
+
+def test_deep_switches(monkeypatch):
+    seen = []
+    monkeypatch.setattr(cli, "run_once", lambda args, cfg, crit: seen.append((args.deep, crit.require_description)))
+    monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: False, raising=False)
+    for argv in ([], ["--no-deep"], ["--deep"]):
+        cli.main(argv + ["--config", "/nonexistent.toml", "--no-ask"])
+    assert seen == [(True, True), (False, True), (True, True)]        # default: read descriptions, and require them

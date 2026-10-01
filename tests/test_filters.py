@@ -347,3 +347,68 @@ def test_64_and_128gb_ram():
     # bigger RAM ranks higher; an M3 Max at $200 is still not a whole working Mac
     assert run("MacBook Pro 16 M3 Max 64GB 1TB").score > run("MacBook Pro 16 M3 Max 24GB 1TB").score
     assert run("MacBook Pro 16 M3 Max 64GB 1TB", price=200).verdict == "REJECT"
+
+
+# ---- descriptions -----------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "description,flag",
+    [
+        ("Selling for parts only, it has a bad logic board.", "parts only"),
+        ("It is iCloud locked so I'm selling cheap.", "icloud locked"),
+        ("Activation Lock is on, you'll need the owner's Apple ID.", "activation lock"),
+        ("Great laptop but the screen is cracked. Works otherwise.", "cracked"),
+        ("After a spill it won't turn on anymore.", "won't turn on"),
+        ("Water damage on the keyboard side.", "water damage"),
+        ("Still enrolled in MDM by my old employer.", "mdm"),
+        ("Not working, stuck at apple logo.", "not working"),
+    ],
+)
+def test_description_that_says_it_is_broken_rejects(description, flag):
+    it = ev("MacBook Air M2 24GB 512GB", description=description)
+    assert it.verdict == "REJECT" and it.reasons[0].startswith("description says:") and flag in it.reasons[0], it.reasons
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        "Works perfectly. We never sell items that are iCloud locked.",
+        "Fully tested: no iCloud lock, no MDM, no water damage, screen is not cracked.",
+        "Activation Lock is off and the Mac has been signed out of iCloud.",
+        "Not for parts - this is a great working machine. Doesn't have any cracks.",
+        "If it won't turn on when you get it, return it within 30 days.",
+        "Like new, battery cycle count 180, comes with the original box and charger.",
+    ],
+)
+def test_ordinary_or_reassuring_descriptions_do_not_reject(description):
+    it = ev("MacBook Air M2 24GB 512GB", description=description)
+    assert it.verdict != "REJECT", (description, it.reasons)
+
+
+def test_text_read_from_photos_is_not_treated_as_the_sellers_words():
+    # an About-This-Mac / Find My screenshot can say "Activation Lock: Off"; that must not reject the listing
+    it = ev("MacBook Air M2 24GB 512GB", description="Great shape. [photo text] Activation Lock | MDM | Memory 24 GB")
+    assert it.verdict != "REJECT"
+
+
+def test_description_that_disagrees_with_the_title_is_flagged():
+    it = ev("MacBook Air M2 24GB 512GB", description="Specs: 16GB RAM, 512GB SSD, very clean.")
+    assert it.verdict == "POSSIBLE" and it.reasons[0].startswith("!!") and "16GB" in it.reasons[0]
+    it = ev("MacBook Pro M2 24GB 1TB", description="Upgraded from the old M1 Pro, runs great.")
+    assert it.verdict == "POSSIBLE" and "M1" in it.reasons[0]
+    # an agreeing description, even a long one, leaves it a MATCH
+    assert ev("MacBook Air M2 24GB 512GB", description="Apple M2 chip with 24GB unified memory and a 512GB SSD. Charger included.").verdict == "MATCH"
+
+
+def test_a_match_needs_its_description_read_when_required():
+    strict = Criteria(max_total=700, require_description=True)
+
+    def run(**kw):
+        return evaluate(Listing(source="ebay", title="MacBook Air M2 24GB 512GB", url="u", price=600, shipping=0.0, **kw), strict)
+
+    unread = run()
+    assert unread.verdict == "POSSIBLE" and any("description not read yet" in r for r in unread.reasons)
+    assert run(description="Clean, works great.", description_checked=True).verdict == "MATCH"
+    assert run(description_checked=True).verdict == "MATCH"                       # read, and the seller wrote nothing
+    assert run(description_checked=True).score > unread.score
+    assert ev("MacBook Air M2 24GB 512GB").verdict == "MATCH"                      # the library default doesn't require it

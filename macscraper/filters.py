@@ -34,6 +34,8 @@ class Criteria:
     mini_penalty: int = 5
     # Facebook Marketplace city used in the report's links (the part after /marketplace/).
     fb_city: str = "chicago"
+    # A MATCH needs the listing's description to have been read (otherwise: POSSIBLE, "read it yourself").
+    require_description: bool = False
     # Posts older than this many days are kept, but only as POSSIBLE.
     stale_days: float = 10
     # Keep listings that state neither chip nor RAM, as POSSIBLE: just ask the seller. False drops them.
@@ -239,6 +241,44 @@ SMALL_MACBOOK_RE = re.compile(
 OLD_CTO_RE = re.compile(r"\bZ0[A-Z0-9]{5,8}\b", re.I)
 
 
+# Things a seller only writes when the Mac is NOT fine. Checked in the seller's own description, where a
+# match rejects the listing - unless the same sentence negates it ("we never sell iCloud locked items").
+STRONG_DESC_FLAGS = [
+    r"for\s+parts", r"parts\s+(only|or\s+repair)", r"icloud\s+lock(ed)?", r"activation\s+lock(ed)?", r"\bmdm\b",
+    r"(won'?t|will\s+not|doesn'?t|does\s+not|can'?t|cannot|unable\s+to)\s+(turn\s+on|power\s+on|boot|start\s+up|charge)",
+    r"not\s+(working|functional|functioning)", r"(water|liquid)\s+damage", r"(cracked|broken|shattered|smashed)\s+(screen|display|glass|lcd)",
+    r"(screen|display|glass|lcd)\s+(?:is\s+|has\s+(?:a\s+)?|was\s+|got\s+)?(?:cracked|broken|shattered|smashed|crack)",
+    r"(bad|dead|faulty|failed)\s+(logic\s*board|motherboard)", r"no\s+(display|video)", r"stuck\s+(on|at)\s+(apple\s+logo|boot)",
+    r"firmware\s+(lock|password)", r"efi\s+lock", r"owner\s+locked",
+]
+STRONG_DESC_RE = [re.compile(p, re.I) for p in STRONG_DESC_FLAGS]
+# "Activation Lock is off", "MDM removed", "iCloud lock: disabled" - the seller is saying it's fine.
+LOCK_OK_AFTER = re.compile(
+    r"^\W*(?:is\s+|are\s+|was\s+|has\s+been\s+|have\s+been\s+|been\s+)?"
+    r"(?:off|disabled|removed|turned\s+off|cleared|signed\s+out|not\s+(?:on|enabled|active)|free|clean|unlocked)\b", re.I)
+NEGATION_RE = re.compile(r"\b(no|not|never|without|nothing|isn'?t|aren'?t|don'?t|do\s+not|doesn'?t|won'?t|zero|0|free\s+of|unlike|if)\b", re.I)
+PHOTO_MARK = " [photo text] "
+
+
+def seller_text(description: str) -> str:
+    """The seller's own words, without text we read out of photos (a screenshot saying 'Activation Lock: Off')."""
+    return description.split(PHOTO_MARK)[0]
+
+
+def strong_description_flags(description: str) -> list[str]:
+    hits = []
+    text = seller_text(description)
+    for rx in STRONG_DESC_RE:
+        for m in rx.finditer(text):
+            sentence = re.split(r"[.!?\n]", text[max(0, m.start() - 80): m.start()])[-1]  # the same sentence, before the match
+            window = text[max(0, m.start() - 25): m.end() + 25]
+            if NEGATION_RE.search(sentence) or SAFE_PHRASES.search(window) or LOCK_OK_AFTER.match(text[m.end(): m.end() + 40]):
+                continue
+            hits.append(re.sub(r"\s+", " ", m.group(0).lower()))
+            break
+    return sorted(set(hits))
+
+
 def find_chips(text: str) -> set[str]:
     chips = set()
     text = INTEL_CORE_M_RE.sub(" ", text)
@@ -420,6 +460,8 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
     flags = red_flags(f"{title} \n {item.condition}", c.extra_red_flags)
     if flags:
         return reject("red flags: " + ", ".join(flags))
+    if strong := strong_description_flags(item.description):
+        return reject("description says: " + ", ".join(strong))
     desc_flags = red_flags(item.description, c.extra_red_flags)
     if desc_flags:
         reasons.insert(0, "!! description mentions: " + ", ".join(desc_flags) + " - read it")
@@ -443,6 +485,20 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
         if ships is None:
             return reject(SHIP_REJECT)
         reasons.append("out-of-town seller who ships - confirm cost, pay with PayPal Goods & Services")
+
+    # --- does the description agree with the title? ---
+    desc_conflict = False
+    if item.description:
+        t_chips, b_chips = find_chips(title), find_chips(item.description)
+        extra_chips = {ch.split()[0] for ch in b_chips} - {ch.split()[0] for ch in t_chips}
+        t_ram, b_ram = find_ram(title), find_ram(item.description)
+        extra_ram = b_ram - t_ram
+        if t_chips and extra_chips:
+            desc_conflict = True
+            reasons.insert(0, f"!! title says {sorted(t_chips)[0]} but the description mentions {', '.join(sorted(extra_chips))} - read it")
+        if t_ram and extra_ram:
+            desc_conflict = True
+            reasons.insert(0, f"!! title says {max(t_ram)}GB but the description mentions {', '.join(str(r) + 'GB' for r in sorted(extra_ram))} - read it")
 
     # --- price ---
     if item.price is None:
@@ -475,8 +531,11 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
     confirmed = (
         chip_known and ram_known and price_known and item.shipping is not None
         and not item.is_auction and not item.price_is_range and not desc_flags
-        and not item.sold_note and not stale and not spec_conflict
+        and not item.sold_note and not stale and not spec_conflict and not desc_conflict
     )
+    if confirmed and c.require_description and not item.description_checked:
+        confirmed = False
+        reasons.append("description not read yet - open the listing and read it before you trust this")
     item.verdict = "MATCH" if confirmed else "POSSIBLE"
 
     # Score: cheaper and newer/bigger is better; unknowns cost points.
@@ -491,6 +550,8 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
     score -= 10 if item.is_auction else 0
     score -= 25 if desc_flags else 0
     score -= 30 if spec_conflict else 0
+    score -= 20 if desc_conflict else 0
+    score -= 5 if (c.require_description and not item.description_checked) else 0
     score -= 20 if item.sold_note else 0
     score -= 10 if stale else 0
     score -= c.mini_penalty if is_mini else 0

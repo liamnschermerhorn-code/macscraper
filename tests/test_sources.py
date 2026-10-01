@@ -215,3 +215,23 @@ def test_searches_follow_the_ram_sizes_too():
     assert any('("24 gb","32 gb","64 gb","128 gb")' in q for q in qs)
     assert ebay.default_queries(("macbook",))[0] == "macbook (24gb,32gb)"          # default unchanged
     assert cli.reddit_queries(("macbook",), (24, 32, 64, 128))[:4] == ["24GB", "32GB", "64GB", "128GB"]
+
+
+def test_ebay_description_iframe_is_fetched_without_backoff(monkeypatch):
+    seen = []
+
+    class Page:
+        def __init__(self, text): self.text = text
+
+    def fake_get(client, url, **kw):
+        seen.append((url, kw.get("retries")))
+        if "ebaydesc" in url:
+            return Page("<html><body>Seller says: clean, no issues. iCloud unlocked.</body></html>")
+        return Page('<html><div class="x-about-this-item">Processor: Apple M2 RAM Size: 24 GB</div>'
+                    '<iframe id="desc_ifr" src="https://vi.vipr.ebaydesc.com/itmdesc/1"></iframe></html>')
+
+    monkeypatch.setattr(ebay, "get", fake_get)
+    ebay.reset_page_breaker()
+    text, _ = ebay.item_page(None, "https://www.ebay.com/itm/1")
+    assert "Processor: Apple M2" in text and "RAM Size: 24 GB" in text and "clean, no issues" in text   # specifics + description
+    assert all(retries == 0 for _, retries in seen) and len(seen) == 2                                  # neither request backs off

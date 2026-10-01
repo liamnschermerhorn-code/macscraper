@@ -347,7 +347,7 @@ def item_page(client: httpx.Client, url: str, log=None) -> tuple[str, list[str]]
     iframe = soup.select_one("iframe#desc_ifr")
     if iframe and iframe.get("src"):
         try:
-            d = get(client, iframe["src"])
+            d = get(client, iframe["src"], retries=0)  # no backoff: a refused description isn't worth waiting for
             parts.append(BeautifulSoup(d.text, "html.parser").get_text(" ", strip=True)[:6000])
         except httpx.HTTPError:
             pass

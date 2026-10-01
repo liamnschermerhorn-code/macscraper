@@ -14,7 +14,8 @@ stale_days = 10        # Reddit posts older than this stay POSSIBLE, with a "may
 loose = true          # keep listings that state neither chip nor RAM, as POSSIBLE (ask the seller); false drops them
 ocr = false           # read the text in listing photos (About This Mac screenshots...); needs `uv sync --extra ocr` on a Mac
 ocr_max_images = 6     # photos to read per listing
-deep = false           # open each candidate page to read specs + description (slower, more accurate)
+deep = true            # read every candidate listing's description (slower: about a page per listing); false = titles only
+require_description = true   # a MATCH needs its description read; otherwise it stays POSSIBLE ("read it yourself")
 
 sources = ["ebay", "craigslist", "reddit"]
 facebook_prompt = true     # at startup, offer to open Marketplace searches and take the pages you save

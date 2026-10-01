@@ -15,6 +15,7 @@ from textual.containers import Container
 from textual.widgets import DataTable, Footer, Header, Static
 
 from . import rejected
+from .filters import seller_text
 from .models import Listing
 
 VERDICT_STYLE = {"MATCH": "bold green", "POSSIBLE": "yellow", "REJECT": "dim red"}
@@ -246,6 +247,14 @@ class ResultsApp(App):
             t.append(f"Condition: {it.condition}\n", style="dim")
         for r in it.reasons:
             t.append("• " + r + "\n", style="bold yellow" if r.startswith("!!") else "")
+        words = " ".join(seller_text(it.description).split())
+        if words:
+            t.append("\nSeller's description:\n", style="bold")
+            t.append(words[:600] + ("…" if len(words) > 600 else "") + "\n", style="dim")
+        elif it.description_checked:
+            t.append("\nThe seller wrote no description.\n", style="dim")
+        else:
+            t.append("\nDescription not read - open the listing.\n", style="dim yellow")
         t.append("\n")
         t.append(it.url, style=f"underline link {it.url}")
         pane.update(t)
