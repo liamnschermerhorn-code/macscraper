@@ -136,6 +136,26 @@ def parse_page(html: str) -> list[Listing]:
 
 
 # ---------------------------------------------------------------- files
+def dropped_paths(text: str) -> list[Path]:
+    """Paths from a line typed or drag-and-dropped into the terminal. Dropping a file types its path with
+    spaces backslash-escaped (or in quotes), a trailing space, and several files arrive on one line."""
+    import os
+    import shlex
+    from urllib.parse import unquote, urlparse
+
+    try:
+        parts = shlex.split(text.strip())
+    except ValueError:  # an unbalanced quote: take the text as it is
+        parts = [text.strip().strip("\"'")]
+    out = []
+    for part in parts:
+        if part.startswith("file://"):
+            part = unquote(urlparse(part).path)
+        out.append(Path(os.path.expanduser(part)))
+    return out
+
+
+
 def find_pages(paths: list[str | Path]) -> list[Path]:
     files: list[Path] = []
     for p in map(Path, paths):

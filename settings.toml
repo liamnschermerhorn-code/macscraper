@@ -17,6 +17,7 @@ ocr_max_images = 6     # photos to read per listing
 deep = false           # open each candidate page to read specs + description (slower, more accurate)
 
 sources = ["ebay", "craigslist", "reddit"]
+facebook_prompt = true     # at startup, offer to open Marketplace searches and take the pages you save
 import_dir = "marketplace"   # folder of Facebook Marketplace pages you saved (see README); read on every run
 facebook_city = "chicago"   # city in the report's Facebook Marketplace links (works without a Facebook account)
 

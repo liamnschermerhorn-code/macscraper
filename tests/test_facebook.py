@@ -1,4 +1,5 @@
 import argparse
+from pathlib import Path
 import os
 import time
 
@@ -85,3 +86,57 @@ def test_saved_listings_are_judged_like_everything_else(tmp_path, monkeypatch):
     assert by["MacBook Pro 2015 box only"].verdict == "REJECT"
     assert by["MacBook Air 13"].verdict == "POSSIBLE"                          # no chip/RAM named: ask the seller
     assert all(i.source == "facebook" for i in items)
+
+
+# ---- the startup conversation ---------------------------------------------------------------------------
+
+def test_dragged_in_paths_are_understood(tmp_path):
+    spaced = tmp_path / "My Saved Search (1).html"
+    assert facebook.dropped_paths(str(spaced).replace(" ", "\\ ").replace("(", "\\(").replace(")", "\\)") + " ") == [spaced]  # Terminal / Ghostty escape
+    assert facebook.dropped_paths(f"'{spaced}'") == [spaced] and facebook.dropped_paths(f'"{spaced}"') == [spaced]
+    a, b = tmp_path / "a.html", tmp_path / "b b.html"
+    assert facebook.dropped_paths(f"{a} {str(b).replace(' ', chr(92) + ' ')} ") == [a, b]                                 # two files at once
+    assert facebook.dropped_paths(f"file://{str(spaced).replace(' ', '%20')}") == [spaced]
+    assert str(facebook.dropped_paths("~/x.html")[0]).endswith("/x.html") and "~" not in str(facebook.dropped_paths("~/x.html")[0])
+    assert facebook.dropped_paths("it's broken") == [Path("it's broken")]                                                  # unbalanced quote: no crash
+
+
+def run_prompt(tmp_path, typed, say_yes=True):
+    """Play the startup conversation with scripted answers; returns (saved paths, what was printed, urls opened)."""
+    said, opened, answers = [], [], iter(typed)
+    saved = cli.prompt_facebook(
+        Criteria(max_total=700), ask=lambda q, d: say_yes, say=lambda *a, **k: said.append(" ".join(map(str, a))),
+        open_url=opened.append, read=lambda prompt: next(answers, ""),
+    )
+    return saved, "\n".join(said), opened
+
+
+def test_startup_conversation(tmp_path):
+    good = tmp_path / "search one.html"
+    good.write_text(CARDS)
+    empty = tmp_path / "empty.html"
+    empty.write_text("<html>nothing</html>")
+    esc = lambda p: str(p).replace(" ", "\\ ")
+    saved, said, opened = run_prompt(tmp_path, [esc(good) + " ", str(tmp_path / "typo.html"), esc(empty), ""])
+    assert saved == [str(good)]                                              # only the file that had listings is kept
+    assert len(opened) == 4 and all("facebook.com/marketplace/chicago/search" in u and "maxPrice=775" in u for u in opened)
+    assert "search one.html: 4 listings" in said and "couldn't find" in said and "empty.html: no listings" in said
+    assert "Webpage, Complete" in said and "scroll to the very bottom" in said and "Got 1 saved page" in said
+
+    saved, said, opened = run_prompt(tmp_path, [""])                         # opens the searches, then Enter straight away
+    assert saved == [] and len(opened) == 4 and "No pages added" in said
+    saved, said, opened = run_prompt(tmp_path, ["whatever"], say_yes=False)  # answered "no": nothing opened, nothing asked
+    assert saved == [] and opened == [] and said == ""
+
+
+def test_dropped_files_reach_the_run_and_the_folder_still_counts(tmp_path, monkeypatch):
+    f = tmp_path / "dropped.html"
+    f.write_text(CARDS)
+    folder = tmp_path / "marketplace"
+    folder.mkdir()
+    (folder / "older.html").write_text(EMBEDDED)
+    monkeypatch.chdir(tmp_path)
+    args = argparse.Namespace(sources="", cl_sites=None, deep=False, ocr=False, import_paths=[str(f)], out=str(tmp_path / "out"))
+    items = cli.collect(args, {}, Criteria(max_total=700))
+    titles = {i.title for i in items}
+    assert "Apple MacBook Air M2 24GB 512GB" in titles and "MacBook Air M2 24GB 1TB – like new" in titles   # dropped file + folder

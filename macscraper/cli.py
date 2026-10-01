@@ -121,7 +121,7 @@ def collect(args, cfg: dict, crit: Criteria) -> list[Listing]:
                 log(f"[{futures[fut]}] failed: {e!r}")
 
     # Marketplace pages you saved yourself (the scraper never contacts Facebook).
-    saved = args.import_paths or [cfg.get("import_dir", "marketplace")]
+    saved = list(args.import_paths or []) + [cfg.get("import_dir", "marketplace")]
     if fb_items := facebook.load(saved, log):
         log(f"[facebook] {len(fb_items)} listings from your saved pages")
         items += fb_items
@@ -425,6 +425,48 @@ def ask_yes_no(question: str, default: bool) -> bool:
         print("  please answer y or n")
 
 
+def prompt_facebook(crit: Criteria, ask=None, say=None, open_url=None, read=None) -> list[str]:
+    """Startup helper for Facebook Marketplace: open a few searches in your browser, wait while you scroll
+    and save each page, and read every file you drag into the terminal. Returns the saved files' paths.
+    (The scraper never contacts Facebook - you do the browsing, it reads the files.)"""
+    import webbrowser
+
+    ask = ask or ask_yes_no
+    say = say or Console().print
+    open_url = open_url or (lambda u: webbrowser.open(u, new=2))
+    read = read or (lambda text: input(text))
+
+    if not ask("Add Facebook Marketplace listings from pages you save yourself?", True):
+        return []
+    searches = {n: u for n, u in manual_links(crit.max_total + crit.offer_stretch, crit.fb_city, crit.models).items()
+                if n.startswith("Facebook")}
+    say(f"\nOpening {len(searches)} Marketplace searches in your browser:")
+    for name, url in searches.items():
+        say(f"  • {name.removeprefix('Facebook Marketplace - ')}")
+        open_url(url)
+    say("\nIn each tab: [bold]scroll to the very bottom[/] (so every listing loads), then press [bold]Cmd+S[/] and choose\n"
+        "Format: [bold]Webpage, Complete[/], and save it anywhere.\n"
+        "Then [bold]drag each saved file into this window[/] and press Enter. Press Enter on an empty line when you're done.\n")
+    saved: list[str] = []
+    while True:
+        line = read("  drop a file (or Enter to finish): ").strip()
+        if not line:
+            break
+        for path in facebook.dropped_paths(line):
+            if not path.exists():
+                say(f"  [red]couldn't find[/] {path}")
+                continue
+            n = len(facebook.load([path]))
+            if n:
+                saved.append(str(path))
+                say(f"  [green]✓[/] {path.name}: {n} listings")
+            else:
+                say(f"  [yellow]![/] {path.name}: no listings in it. Scroll down to load them, then save as 'Webpage, Complete'. "
+                    "(Was it saved as 'HTML only'?) Try again.")
+    say(f"Got {len(saved)} saved page(s).\n" if saved else "No pages added - continuing without Facebook.\n")
+    return saved
+
+
 def ask_preferences(crit: Criteria, ask_auctions: bool = True, ask_stretch: bool = True) -> None:
     """Startup questions; pressing Enter keeps the config.toml / default answer."""
     if ask_auctions:
@@ -467,6 +509,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--why", default="", help="a note to go with --reject")
     p.add_argument("--import", dest="import_paths", action="append", metavar="PATH",
                    help="read Facebook Marketplace pages you saved (a .html file or a folder; repeatable). Default: the marketplace/ folder")
+    p.add_argument("--no-facebook", action="store_true", help="don't ask about Facebook Marketplace pages at startup")
     p.add_argument("--no-tui", action="store_true", help="print a plain table instead of the live, resizable results screen")
     p.add_argument("--no-ask", action="store_true", help="don't ask questions at startup; use config/defaults")
     p.add_argument("--strict", action="store_true", help="drop listings that state neither chip nor RAM (default: keep them as POSSIBLE)")
@@ -511,6 +554,8 @@ def main(argv: list[str] | None = None) -> None:
     )
     if not args.no_ask and sys.stdin.isatty():
         ask_preferences(crit, ask_auctions=args.auctions is None, ask_stretch=args.stretch is None)
+        if cfg.get("facebook_prompt", True) and not args.no_facebook:
+            args.import_paths = list(args.import_paths or []) + prompt_facebook(crit)
 
     while True:
         try:
