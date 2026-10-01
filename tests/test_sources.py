@@ -206,3 +206,12 @@ def test_searches_and_links_follow_the_chosen_models():
     links = cli.manual_links(575, "chicago", ("macbook",))
     assert all("mini" not in n.lower() and "studio" not in n.lower() for n in links)
     assert len([n for n in links if n.startswith("Facebook")]) == 2
+
+
+def test_searches_follow_the_ram_sizes_too():
+    from macscraper import cli
+    qs = ebay.default_queries(("macbook",), (24, 32, 64, 128))
+    assert qs[0] == "macbook (24gb,32gb,64gb,128gb)"
+    assert any('("24 gb","32 gb","64 gb","128 gb")' in q for q in qs)
+    assert ebay.default_queries(("macbook",))[0] == "macbook (24gb,32gb)"          # default unchanged
+    assert cli.reddit_queries(("macbook",), (24, 32, 64, 128))[:4] == ["24GB", "32GB", "64GB", "128GB"]

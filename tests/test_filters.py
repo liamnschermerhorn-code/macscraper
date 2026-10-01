@@ -319,3 +319,22 @@ def test_macbook_only_setting_rejects_desktops():
         it = evaluate(Listing(source="t", title=title, url="u", price=600, shipping=0.0), only)
         assert it.verdict == "REJECT" and "not wanted" in it.reasons[0], (title, it.reasons)
     assert evaluate(Listing(source="t", title="MacBook Air M2 24GB 512GB", url="u", price=600, shipping=0.0), only).verdict == "MATCH"
+
+
+def test_64_and_128gb_ram():
+    big = Criteria(max_total=1000, ram_options=(24, 32, 64, 128))
+    def run(title, price=700.0, crit=big):
+        return evaluate(Listing(source="t", title=title, url="u", price=price, shipping=0.0), crit)
+    assert run("MacBook Pro 16 M3 Max 64GB 1TB").verdict == "MATCH"
+    it = run("MacBook Pro 16 M4 Max 128GB 2TB")                      # 128 counts as RAM next to a Max chip
+    assert it.verdict == "MATCH" and it.ram_gb == 128
+    assert run("MacBook Pro 16 M3 Max 128GB RAM 1TB").ram_gb == 128
+    # without a Max chip, a bare "128GB" is a drive size, not RAM
+    it = run("MacBook Air M2 128GB")
+    assert it.verdict == "POSSIBLE" and it.ram_gb is None and "RAM not stated" in it.reasons
+    # not wanted unless listed in ram_options
+    assert evaluate(Listing(source="t", title="MacBook Pro 16 M3 Max 64GB 1TB", url="u", price=700.0, shipping=0.0),
+                    Criteria(max_total=1000)).reasons[0].startswith("RAM 64GB")
+    # bigger RAM ranks higher; an M3 Max at $200 is still not a whole working Mac
+    assert run("MacBook Pro 16 M3 Max 64GB 1TB").score > run("MacBook Pro 16 M3 Max 24GB 1TB").score
+    assert run("MacBook Pro 16 M3 Max 64GB 1TB", price=200).verdict == "REJECT"

@@ -118,15 +118,17 @@ ALL_MODELS = ("macbook", "mac mini", "mac studio")
 JUNK_WORDS = "-intel -i3 -i5 -i7 -i9 -8gb -16gb -2015 -2016 -2017 -2018 -2019 -2020"
 
 
-def default_queries(models=ALL_MODELS) -> list[str]:
+def default_queries(models=ALL_MODELS, rams=(24, 32)) -> list[str]:
     """Searches for the Mac kinds you want (settings.toml `models`)."""
     models = [m for m in models if m in ALL_MODELS] or ["macbook"]
     names = [f'"{m}"' if " " in m else m for m in models]
     group = names[0] if len(names) == 1 else "(" + ",".join(names) + ")"
-    qs = [f"{m} (24gb,32gb)" for m in models]
+    gb = ",".join(f"{r}gb" for r in rams)
+    gb_phrases = ",".join(f'"{r} gb"' for r in rams)
+    qs = [f"{m} ({gb})" for m in models]
     if "mac studio" in models:
         qs.append("mac studio (m2,m4) 32gb")
-    qs.append(f'{group} (m2,m3,m4) ("24 gb","32 gb")')
+    qs.append(f"{group} (m2,m3,m4) ({gb_phrases})")
     # Listings that name the chip but not the RAM...
     qs.append(f"{group} (m2,m3,m4)")
     # ...and ones that name neither. Newest first, minus the obvious Intel / small-RAM junk so the

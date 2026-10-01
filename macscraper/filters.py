@@ -255,6 +255,8 @@ def find_chips(text: str) -> set[str]:
 def find_ram(text: str) -> set[int]:
     """Return GB values that look like memory sizes (not SSD sizes)."""
     found = set()
+    # 128GB RAM exists only on Max/Ultra chips, whose machines never have a 128GB drive.
+    maxed = bool(re.search(r"\bm[1-5]\s?(max|ultra)\b", text, re.I))
     for m in GB_RE.finditer(text):
         n = int(m.group(1))
         after = text[m.end(): m.end() + 20]
@@ -263,8 +265,8 @@ def find_ram(text: str) -> set[int]:
             continue
         if n not in RAM_SIZES:
             continue
-        # "128GB" is almost always storage on these machines unless called RAM.
-        if n in (128, 192) and not (RAM_WORDS.match(after) or re.search(r"(ram|memory)\s*:?\s*$", before, re.I)):
+        # "128GB" is usually a drive size unless called RAM (or the chip is a Max/Ultra).
+        if n in (128, 192) and not (maxed or RAM_WORDS.match(after) or re.search(r"(ram|memory)\s*:?\s*$", before, re.I)):
             continue
         found.add(n)
     return found
@@ -482,7 +484,7 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
         score += int((c.max_total - item.total) / 10)
     score += {"M4": 15, "M3": 8, "M2": 0}.get(item.chip[:2], 0)
     score += 10 if " " in item.chip.rstrip("?") else 0  # Pro/Max
-    score += 8 if item.ram_gb == 32 else 0
+    score += 8 if (item.ram_gb or 0) >= 32 else 0
     score -= 0 if chip_known else 15
     score -= 0 if ram_known else 20
     score -= 10 if item.is_auction else 0

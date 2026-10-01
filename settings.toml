@@ -6,7 +6,7 @@ max_total = 500        # dollars, including shipping (was 700 - change back here
 min_price = 250        # cheaper than this = part / accessory / scam / empty box (auctions exempt)
 offer_stretch = 75     # default for "Include flexible prices?": keep Best Offer/local listings up to $75 over budget; 0 = no
 chips = ["M2", "M3", "M4"]
-ram_options = [24, 32]
+ram_options = [24, 32, 64, 128]   # GB of RAM to look for
 models = ["macbook"]   # MacBooks only, for now. To add them back: ["macbook", "mac mini", "mac studio"]
 mini_penalty = 5                   # rank desktops (mini/Studio) a little below MacBooks; 0 = equal
 no_auctions = false    # default answer to "Include auctions?" at startup

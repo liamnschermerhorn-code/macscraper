@@ -33,8 +33,8 @@ DEFAULT_CL_QUERIES = ["macbook", "mac mini", "mac studio"]  # filtered to the ch
 REDDIT_MODEL_QUERIES = {"macbook": "MacBook", "mac mini": "Mac mini", "mac studio": "Mac Studio"}
 
 
-def reddit_queries(models) -> list[str]:
-    return ["24GB", "32GB", "M2", "M3", "M4"] + [q for m, q in REDDIT_MODEL_QUERIES.items() if m in models]
+def reddit_queries(models, rams=(24, 32)) -> list[str]:
+    return [f"{r}GB" for r in rams] + ["M2", "M3", "M4"] + [q for m, q in REDDIT_MODEL_QUERIES.items() if m in models]
 # Big-city Craigslists searched for sellers who will ship. Your own city goes in craigslist_sites.
 DEFAULT_CL_SHIP_SITES = ["sfbay", "losangeles", "newyork", "chicago", "seattle", "boston"]
 
@@ -93,7 +93,7 @@ def collect(args, cfg: dict, crit: Criteria) -> list[Listing]:
     def run_ebay():
         with make_client() as c:
             custom = cfg.get("ebay_queries")
-            return ebay.search(c, custom or ebay.default_queries(crit.models), search_ceiling, crit.min_price, log,
+            return ebay.search(c, custom or ebay.default_queries(crit.models, crit.ram_options), search_ceiling, crit.min_price, log,
                                fallback=None if custom else ebay.fallback_queries(crit.models))
 
     def run_craigslist():
@@ -109,7 +109,7 @@ def collect(args, cfg: dict, crit: Criteria) -> list[Listing]:
 
     def run_reddit():
         with make_client() as c:
-            return reddit.search(c, cfg.get("reddit_queries") or reddit_queries(crit.models), crit.min_price, log)
+            return reddit.search(c, cfg.get("reddit_queries") or reddit_queries(crit.models, crit.ram_options), crit.min_price, log)
 
     jobs = {"ebay": run_ebay, "craigslist": run_craigslist, "reddit": run_reddit}
     with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
