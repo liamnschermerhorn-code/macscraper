@@ -117,6 +117,11 @@ DEFAULT_QUERIES = [
     "mac mini (24gb,32gb)",
     "mac studio (m2,m4) 32gb",
     '(macbook,mac mini) (m2,m3,m4) ("24 gb","32 gb")',
+    # Listings that name the chip but not the RAM...
+    '(macbook,"mac mini","mac studio") (m2,m3,m4)',
+    # ...and ones that name neither. Newest first, minus the obvious Intel / small-RAM junk so the
+    # few result pages we read are mostly worth reading. The filter judges the rest (POSSIBLE: ask the seller).
+    '(macbook,"mac mini","mac studio") -intel -i3 -i5 -i7 -i9 -8gb -16gb -2015 -2016 -2017 -2018 -2019 -2020',
 ]
 FALLBACK_QUERIES = [
     "macbook air m2 24gb", "macbook air m3 24gb", "macbook air m4 24gb", "macbook air m4 32gb",

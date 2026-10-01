@@ -175,3 +175,11 @@ def test_reddit_prices_without_dollar_sign():
     assert reddit._prices("M2 24GB 512GB, 100% battery, 250 cycles", 150) == []
     assert reddit._prices("Selling for 2 years old, 512 GB", 150) == []
     assert reddit._prices("$640 shipped, or 600 local", 150) == [640.0]
+
+
+def test_ebay_default_queries_also_find_listings_without_chip_or_ram():
+    qs = ebay.DEFAULT_QUERIES
+    assert any("(m2,m3,m4)" in q and "gb" not in q.lower() for q in qs)      # chip, no RAM
+    assert any("-intel" in q and "(m2" not in q and "24gb" not in q for q in qs)  # neither
+    url = ebay.search_url(qs[-1], 575, 150)
+    assert "-intel" in url and "%28macbook" in url

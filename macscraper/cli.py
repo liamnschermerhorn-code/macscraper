@@ -29,7 +29,7 @@ console = Console(stderr=True)
 PAGE_WORKERS = 4  # listing pages fetched at the same time (Craigslist); eBay pages stay one-at-a-time
 
 DEFAULT_CL_QUERIES = ["macbook", "mac mini", "mac studio"]
-DEFAULT_REDDIT_QUERIES = ["24GB", "32GB", "M2", "M3", "M4"]
+DEFAULT_REDDIT_QUERIES = ["24GB", "32GB", "M2", "M3", "M4", "MacBook", "Mac mini", "Mac Studio"]
 # Big-city Craigslists searched for sellers who will ship. Your own city goes in craigslist_sites.
 DEFAULT_CL_SHIP_SITES = ["sfbay", "losangeles", "newyork", "chicago", "seattle", "boston"]
 
