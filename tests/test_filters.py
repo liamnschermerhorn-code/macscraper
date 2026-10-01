@@ -294,3 +294,19 @@ def test_intel_core_m_is_not_apple_m3():
     assert find_chips("MacBook Air M2-24GB-1TB") == {"M2"}
     assert ev("MacBook Air M3-24GB-512GB", price=450).verdict == "MATCH"
     assert ev('MacBook Pro 14" M4 Pro 12-core 24GB 512GB', price=480).verdict == "MATCH"
+
+
+def test_touch_bar_rules():
+    # no chip named: Intel unless the RAM says it's the 2022 M2 13" Pro
+    for title in ('MacBook Pro 13" Touch Bar 512GB', 'MacBook Pro 13" Touch Bar 32GB 1TB', "MacBook Pro TouchBar 2019"):
+        r = ev(title, price=450)
+        assert r.verdict == "REJECT" and "Touch Bar" in r.reasons[0], (title, r.reasons)
+    it = ev('MacBook Pro 13" Touch Bar 24GB 512GB', price=450)
+    assert it.verdict == "POSSIBLE" and any("M2 13-inch" in r for r in it.reasons)
+    # the M2 13" Pro really has a Touch Bar and is a legitimate match
+    assert ev('MacBook Pro 13" M2 Touch Bar 24GB 512GB', price=450).verdict == "MATCH"
+    # M3/M4 Pros have no Touch Bar -> flagged
+    it = ev('MacBook Pro 14" M3 Touch Bar 24GB 512GB', price=450)
+    assert it.verdict == "POSSIBLE" and it.reasons[0].startswith("!!")
+    # Touch ID is not Touch Bar
+    assert ev("MacBook Air M2 24GB 512GB Touch ID", price=450).verdict == "MATCH"

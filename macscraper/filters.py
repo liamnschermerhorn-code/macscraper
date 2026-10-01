@@ -225,6 +225,11 @@ PRO_15_RE = re.compile(
     r"mac\s?book\s*pro[^0-9]{0,15}\b15(?:\.\d)?\s?" + _INCH + r"|\b15(?:\.\d)?\s?" + _INCH + r"\s*(?:apple\s+)?mac\s?book\s*pro",
     re.I,
 )
+# The Touch Bar was on 2016-2020 Intel MacBook Pros and, on the 13", on the M1 (2020) and M2 (2022)
+# versions - never on an M3/M4 Mac. Intel Macs never came with 24GB (8/16/32/64 only) and the M2 13"
+# tops out at 24GB, so a Touch Bar Pro with 24GB is an M2 and one with 32GB is Intel.
+TOUCH_BAR_RE = re.compile(r"\btouch\s*-?\s*bar\b", re.I)
+
 # 11" and 12" MacBooks (Air 11", the 12" MacBook) were only ever made with Intel chips.
 SMALL_MACBOOK_RE = re.compile(
     r"mac\s?book[^\n]{0,30}?\b1[12]\s?" + _INCH + r"|\b1[12]\s?" + _INCH + r"\s*(?:apple\s+)?mac\s?book", re.I
@@ -364,6 +369,18 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
             return reject(old_hint)
         spec_conflict = True
         reasons.insert(0, f"!! {old_hint}, but the listing names {item.chip} - likely mislabeled, verify")
+
+    # --- Touch Bar: mostly Intel, but also the 2022 M2 13" Pro ---
+    if TOUCH_BAR_RE.search(text):
+        ram_now = find_ram(title) or find_ram(body)
+        if not chips:
+            if 24 in ram_now:
+                reasons.append("Touch Bar + 24GB: only the 2022 M2 13-inch Pro fits (Intel never had 24GB) - confirm the chip")
+            else:
+                return reject("Touch Bar MacBook Pro with no M2 named - Intel (2016-2020) unless it's the 2022 M2 13-inch")
+        elif any(ch.split()[0] in ("M3", "M4") for ch in chips) and not any(ch.split()[0] == "M2" for ch in chips):
+            spec_conflict = True
+            reasons.insert(0, f"!! Touch Bar, but no {item.chip} MacBook Pro has one - likely mislabeled, verify")
 
     # --- serial number (when the seller wrote one) ---
     if serial_is_pre_m2(find_serial(text)):
