@@ -51,6 +51,10 @@ NOT_CHIP_AFTER = re.compile(r"^\s*(nvme|ssd|sata|slot|drive|2280|key)", re.I)
 
 INTEL_RE = re.compile(r"\b(intel|core\s?i[3579]|i[3579][-\s]\d{4}|i[3579]\b|xeon|2012|2013|2014|2015|2016|2017|2018|2019)\b", re.I)
 
+# Intel wording without model years: safe to look for in a long description, where a bare year
+# could be a purchase date ("bought in 2020").
+INTEL_WORDS_RE = re.compile(r"\b(intel|core\s?i[3579]|i[3579][-\s]\d{4}|xeon)\b", re.I)
+
 # Numbers followed by GB/G (e.g. "24GB", "24 GB", "24G", "24gb ram").
 GB_RE = re.compile(r"\b(\d{1,4})\s?(gb|g)\b(?!\s?(?:ps|bps|hz))", re.I)
 TB_RE = re.compile(r"\b\d\s?tb\b", re.I)
@@ -307,6 +311,8 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
         return reject("gray Mac mini - only the 2018 Intel model was gray")
     elif OLD_YEAR_RE.search(title):
         return reject("model year means M1 or Intel")
+    elif INTEL_WORDS_RE.search(body):
+        return reject("description says Intel")
     else:
         for rx, chip in YEAR_HINTS:
             if rx.search(title) and chip in wanted:
@@ -321,6 +327,8 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
     old_hint = None
     if PRO_15_RE.search(text):
         old_hint = "15-inch MacBook Pro - Apple Silicon never made one, so it's Intel"
+    elif chips and (INTEL_RE.search(title) or OLD_YEAR_RE.search(title)):
+        old_hint = "title also mentions an Intel-era year or chip"
     elif m := OLD_CTO_RE.search(text):
         old_hint = f"custom-config number {m.group(0).upper()} is from before the M1 era (Intel)"
     if old_hint:

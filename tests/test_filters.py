@@ -246,3 +246,13 @@ def test_15_inch_macbook_pro_and_old_custom_config_number():
     for title in ('MacBook Pro 15" M2 32GB 1TB', "MacBook Pro M2 32GB 1TB Z0V10001W"):
         it = ev(title)
         assert it.verdict == "POSSIBLE" and it.reasons[0].startswith("!!"), (title, it.reasons)
+
+
+def test_year_and_intel_wording_checks():
+    assert "description says Intel" in ev("MacBook Air 24GB 512GB", description="Late 2018 model, Intel i7").reasons[0]
+    # a purchase year in the description is not a model year
+    assert ev("MacBook Air M2 24GB 512GB", description="Bought in 2020 for work").verdict == "MATCH"
+    # chip named but the title's year says Intel era -> flagged, never a clean MATCH
+    it = ev("MacBook Air M2 24GB 512GB 2019")
+    assert it.verdict == "POSSIBLE" and it.reasons[0].startswith("!!")
+    assert ev("MacBook Air 2022 24GB 512GB").verdict == "POSSIBLE"  # year-inferred chip stays POSSIBLE
