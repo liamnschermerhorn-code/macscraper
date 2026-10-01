@@ -112,23 +112,40 @@ def _warm_up(client: httpx.Client) -> None:
 
 # eBay's search box understands "(a,b)" as "a OR b", so a few broad searches cover every
 # chip/RAM combination. If eBay ever stops honoring that, FALLBACK_QUERIES spells them out.
-DEFAULT_QUERIES = [
-    "macbook (24gb,32gb)",
-    "mac mini (24gb,32gb)",
-    "mac studio (m2,m4) 32gb",
-    '(macbook,mac mini) (m2,m3,m4) ("24 gb","32 gb")',
+ALL_MODELS = ("macbook", "mac mini", "mac studio")
+JUNK_WORDS = "-intel -i3 -i5 -i7 -i9 -8gb -16gb -2015 -2016 -2017 -2018 -2019 -2020"
+
+
+def default_queries(models=ALL_MODELS) -> list[str]:
+    """Searches for the Mac kinds you want (settings.toml `models`)."""
+    models = [m for m in models if m in ALL_MODELS] or ["macbook"]
+    names = [f'"{m}"' if " " in m else m for m in models]
+    group = names[0] if len(names) == 1 else "(" + ",".join(names) + ")"
+    qs = [f"{m} (24gb,32gb)" for m in models]
+    if "mac studio" in models:
+        qs.append("mac studio (m2,m4) 32gb")
+    qs.append(f'{group} (m2,m3,m4) ("24 gb","32 gb")')
     # Listings that name the chip but not the RAM...
-    '(macbook,"mac mini","mac studio") (m2,m3,m4)',
+    qs.append(f"{group} (m2,m3,m4)")
     # ...and ones that name neither. Newest first, minus the obvious Intel / small-RAM junk so the
     # few result pages we read are mostly worth reading. The filter judges the rest (POSSIBLE: ask the seller).
-    '(macbook,"mac mini","mac studio") -intel -i3 -i5 -i7 -i9 -8gb -16gb -2015 -2016 -2017 -2018 -2019 -2020',
-]
+    qs.append(f"{group} {JUNK_WORDS}")
+    return qs
+
+
+DEFAULT_QUERIES = default_queries()
 FALLBACK_QUERIES = [
     "macbook air m2 24gb", "macbook air m3 24gb", "macbook air m4 24gb", "macbook air m4 32gb",
     "macbook pro m2 24gb", "macbook pro m2 pro 32gb", "macbook pro m3 24gb", "macbook pro m4 24gb",
     "mac mini m2 24gb", "mac mini m2 pro 32gb", "mac mini m4 24gb", "mac mini m4 32gb",
     "macbook 24gb", "macbook 32gb m2", "mac mini 24gb", "mac studio m2 max 32gb", "mac studio 32gb",
 ]
+
+
+def fallback_queries(models=ALL_MODELS) -> list[str]:
+    return [q for q in FALLBACK_QUERIES if any(m in q for m in models)]
+
+
 MAX_PAGES = 3  # 240 results per page, newest first
 
 
@@ -176,12 +193,13 @@ def _run(client: httpx.Client, queries: list[str], max_price: float, min_price: 
     return results, blocked
 
 
-def search_html(client: httpx.Client, queries: list[str], max_price: float, min_price: float, log) -> list[Listing]:
+def search_html(client: httpx.Client, queries: list[str], max_price: float, min_price: float, log,
+                fallback: list[str] | None = None) -> list[Listing]:
     _warm_up(client)
     results, blocked = _run(client, queries, max_price, min_price, log)
-    if not results and not blocked and queries == DEFAULT_QUERIES:
+    if not results and not blocked and fallback:
         log("[ebay] combined searches found nothing - falling back to one search per model")
-        results, blocked = _run(client, FALLBACK_QUERIES, max_price, min_price, log)
+        results, blocked = _run(client, fallback, max_price, min_price, log)
     if blocked:
         log("[ebay] some searches stayed blocked - run again later, or set EBAY_CLIENT_ID/SECRET to use the API")
     return results
@@ -250,13 +268,14 @@ def search_api(client: httpx.Client, queries: list[str], max_price: float, min_p
     return results
 
 
-def search(client: httpx.Client, queries: list[str], max_price: float, min_price: float, log) -> list[Listing]:
+def search(client: httpx.Client, queries: list[str], max_price: float, min_price: float, log,
+           fallback: list[str] | None = None) -> list[Listing]:
     if os.environ.get("EBAY_CLIENT_ID") and os.environ.get("EBAY_CLIENT_SECRET"):
         try:
             return search_api(client, queries, max_price, min_price, log)
         except (httpx.HTTPError, KeyError) as e:
             log(f"[ebay-api] failed ({e}); falling back to HTML")
-    return search_html(client, queries, max_price, min_price, log)
+    return search_html(client, queries, max_price, min_price, log, fallback)
 
 
 # Gallery photos: https://i.ebayimg.com/images/g/<id>/s-l140.jpg (thumbnail) ... s-l1600.jpg (large).

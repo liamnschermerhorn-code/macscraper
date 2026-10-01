@@ -191,3 +191,18 @@ def test_manual_links_facebook_uses_city_and_budget():
     fb = [u for n, u in links.items() if n.startswith("Facebook")]
     assert len(fb) == 4
     assert all("/marketplace/chicago/search?" in u and "maxPrice=575" in u and "creation_time_descend" in u for u in fb)
+
+
+def test_searches_and_links_follow_the_chosen_models():
+    from macscraper import cli
+    only = ebay.default_queries(("macbook",))
+    assert only and all("mini" not in q and "studio" not in q for q in only)
+    assert any(q.startswith("macbook -intel") for q in only)           # the broad query, one model: no group
+    both = ebay.default_queries(("macbook", "mac mini"))
+    assert any('"mac mini"' in q for q in both) and not any("studio" in q for q in both)
+    assert ebay.DEFAULT_QUERIES == ebay.default_queries()              # default stays all three
+    assert all("macbook" in q for q in ebay.fallback_queries(("macbook",)))
+    assert cli.reddit_queries(("macbook",)) == ["24GB", "32GB", "M2", "M3", "M4", "MacBook"]
+    links = cli.manual_links(575, "chicago", ("macbook",))
+    assert all("mini" not in n.lower() and "studio" not in n.lower() for n in links)
+    assert len([n for n in links if n.startswith("Facebook")]) == 2

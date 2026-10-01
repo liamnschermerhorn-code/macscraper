@@ -311,3 +311,11 @@ def test_touch_bar_rules():
     assert it.verdict == "POSSIBLE" and it.reasons[0].startswith("!!")
     # Touch ID is not Touch Bar
     assert ev("MacBook Air M2 24GB 512GB Touch ID", price=450).verdict == "MATCH"
+
+
+def test_macbook_only_setting_rejects_desktops():
+    only = Criteria(max_total=700, models=("macbook",))
+    for title in ("Apple Mac mini M2 24GB 512GB", "Apple Mac Studio M2 Max 32GB 512GB"):
+        it = evaluate(Listing(source="t", title=title, url="u", price=600, shipping=0.0), only)
+        assert it.verdict == "REJECT" and "not wanted" in it.reasons[0], (title, it.reasons)
+    assert evaluate(Listing(source="t", title="MacBook Air M2 24GB 512GB", url="u", price=600, shipping=0.0), only).verdict == "MATCH"

@@ -1,6 +1,6 @@
 # macscraper
 
-Searches eBay, Craigslist and r/appleswap for an **Apple Silicon MacBook, Mac mini or Mac Studio (M2/M3/M4, any variant) with 24 or 32 GB RAM,
+Searches eBay, Craigslist and r/appleswap for an **Apple Silicon MacBook (M2/M3/M4, any variant; `models` in `settings.toml` can add Mac mini / Mac Studio) with 24 or 32 GB RAM,
 fully working, ≤ $500 delivered** (change `max_total` in `settings.toml`). It sorts every listing into:
 
 | Verdict | Meaning |

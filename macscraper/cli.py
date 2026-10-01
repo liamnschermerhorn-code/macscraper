@@ -29,8 +29,12 @@ console = Console(stderr=True)
 
 PAGE_WORKERS = 4  # listing pages fetched at the same time (Craigslist); eBay pages stay one-at-a-time
 
-DEFAULT_CL_QUERIES = ["macbook", "mac mini", "mac studio"]
-DEFAULT_REDDIT_QUERIES = ["24GB", "32GB", "M2", "M3", "M4", "MacBook", "Mac mini", "Mac Studio"]
+DEFAULT_CL_QUERIES = ["macbook", "mac mini", "mac studio"]  # filtered to the chosen `models`
+REDDIT_MODEL_QUERIES = {"macbook": "MacBook", "mac mini": "Mac mini", "mac studio": "Mac Studio"}
+
+
+def reddit_queries(models) -> list[str]:
+    return ["24GB", "32GB", "M2", "M3", "M4"] + [q for m, q in REDDIT_MODEL_QUERIES.items() if m in models]
 # Big-city Craigslists searched for sellers who will ship. Your own city goes in craigslist_sites.
 DEFAULT_CL_SHIP_SITES = ["sfbay", "losangeles", "newyork", "chicago", "seattle", "boston"]
 
@@ -51,7 +55,7 @@ def load_config(path: Path | None = None) -> dict:
     return merged
 
 
-def manual_links(max_total: float, fb_city: str = "chicago") -> dict[str, str]:
+def manual_links(max_total: float, fb_city: str = "chicago", models=("macbook", "mac mini", "mac studio")) -> dict[str, str]:
     """Sites the scraper can't read - check these by hand. The Facebook Marketplace links work
     without a Facebook account (you may get a login pop-up you can close)."""
     q = quote_plus("macbook 24gb")
@@ -61,20 +65,22 @@ def manual_links(max_total: float, fb_city: str = "chicago") -> dict[str, str]:
         return (f"https://www.facebook.com/marketplace/{fb_city}/search?query={quote_plus(query)}"
                 f"&maxPrice={m}&sortBy=creation_time_descend&exact=false")
 
-    return {
+    mini, studio = "mac mini" in models, "mac studio" in models
+    links = {
         "Facebook Marketplace - MacBook (newest first)": fb("macbook"),
         "Facebook Marketplace - MacBook 24GB": fb("macbook 24gb"),
-        "Facebook Marketplace - Mac mini": fb("mac mini"),
-        "Facebook Marketplace - Mac Studio": fb("mac studio"),
+        **({"Facebook Marketplace - Mac mini": fb("mac mini")} if mini else {}),
+        **({"Facebook Marketplace - Mac Studio": fb("mac studio")} if studio else {}),
         "OfferUp (MacBook 24GB)": f"https://offerup.com/search?q={q}&PRICE_MAX={m}",
-        "OfferUp (Mac mini 24GB)": f"https://offerup.com/search?q={quote_plus('mac mini 24gb')}&PRICE_MAX={m}",
+        **({"OfferUp (Mac mini 24GB)": f"https://offerup.com/search?q={quote_plus('mac mini 24gb')}&PRICE_MAX={m}"} if mini else {}),
         "Mercari (MacBook 24GB)": f"https://www.mercari.com/search/?keyword={q}&maxPrice={m * 100}&itemStatuses=1",
         "Swappa (MacBook Air M2)": "https://swappa.com/listings/macbook-air-13-2022",
-        "Swappa (Mac mini 2023)": "https://swappa.com/listings/mac-mini-2023",
+        **({"Swappa (Mac mini 2023)": "https://swappa.com/listings/mac-mini-2023"} if mini else {}),
         "Back Market (MacBook M2)": "https://www.backmarket.com/en-us/search?q=macbook%20air%20m2%2024gb",
         "Apple Certified Refurbished Macs": "https://www.apple.com/shop/refurbished/mac",
         "r/appleswap (new)": "https://www.reddit.com/r/appleswap/new/",
     }
+    return links
 
 
 def collect(args, cfg: dict, crit: Criteria) -> list[Listing]:
@@ -86,7 +92,9 @@ def collect(args, cfg: dict, crit: Criteria) -> list[Listing]:
     # Each site gets its own connection and runs at the same time; total time ~= the slowest site.
     def run_ebay():
         with make_client() as c:
-            return ebay.search(c, cfg.get("ebay_queries", ebay.DEFAULT_QUERIES), search_ceiling, crit.min_price, log)
+            custom = cfg.get("ebay_queries")
+            return ebay.search(c, custom or ebay.default_queries(crit.models), search_ceiling, crit.min_price, log,
+                               fallback=None if custom else ebay.fallback_queries(crit.models))
 
     def run_craigslist():
         local = args.cl_sites.split(",") if args.cl_sites else cfg.get("craigslist_sites", [])
@@ -95,13 +103,13 @@ def collect(args, cfg: dict, crit: Criteria) -> list[Listing]:
             log("[craigslist] no local cities set (craigslist_sites in config.toml) - only showing sellers who ship")
         with make_client() as c:
             return craigslist.search(
-                c, local, ship, cfg.get("craigslist_queries", DEFAULT_CL_QUERIES), search_ceiling, crit.min_price, log,
+                c, local, ship, cfg.get("craigslist_queries") or [q for q in DEFAULT_CL_QUERIES if q in crit.models], search_ceiling, crit.min_price, log,
                 postal=str(cfg["home_zip"]) if cfg.get("home_zip") else None, distance=cfg.get("max_distance_miles"),
             )
 
     def run_reddit():
         with make_client() as c:
-            return reddit.search(c, cfg.get("reddit_queries", DEFAULT_REDDIT_QUERIES), crit.min_price, log)
+            return reddit.search(c, cfg.get("reddit_queries") or reddit_queries(crit.models), crit.min_price, log)
 
     jobs = {"ebay": run_ebay, "craigslist": run_craigslist, "reddit": run_reddit}
     with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
@@ -259,7 +267,7 @@ def write_outputs(items: list[Listing], out: Path, crit: Criteria, new_keys: set
             f"<td><small>{html.escape('; '.join(i.reasons))}</small></td></tr>"
         )
 
-    links = "".join(f'<li><a href="{u}" target="_blank">{html.escape(n)}</a></li>' for n, u in manual_links(crit.max_total + crit.offer_stretch, crit.fb_city).items())
+    links = "".join(f'<li><a href="{u}" target="_blank">{html.escape(n)}</a></li>' for n, u in manual_links(crit.max_total + crit.offer_stretch, crit.fb_city, crit.models).items())
     rejects = sorted((i for i in items if i.verdict == "REJECT"), key=lambda i: i.reasons[0] if i.reasons else "")
     page = f"""<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Mac deal hunt</title>

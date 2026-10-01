@@ -7,7 +7,7 @@ min_price = 250        # cheaper than this = part / accessory / scam / empty box
 offer_stretch = 75     # default for "Include flexible prices?": keep Best Offer/local listings up to $75 over budget; 0 = no
 chips = ["M2", "M3", "M4"]
 ram_options = [24, 32]
-models = ["macbook", "mac mini", "mac studio"]   # also possible: "imac"
+models = ["macbook"]   # MacBooks only, for now. To add them back: ["macbook", "mac mini", "mac studio"]
 mini_penalty = 5                   # rank desktops (mini/Studio) a little below MacBooks; 0 = equal
 no_auctions = false    # default answer to "Include auctions?" at startup
 stale_days = 10        # Reddit posts older than this stay POSSIBLE, with a "may be gone" note
