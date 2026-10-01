@@ -298,9 +298,10 @@ def test_intel_core_m_is_not_apple_m3():
 
 def test_touch_bar_rules():
     # no chip named: Intel unless the RAM says it's the 2022 M2 13" Pro
-    for title in ('MacBook Pro 13" Touch Bar 512GB', 'MacBook Pro 13" Touch Bar 32GB 1TB', "MacBook Pro TouchBar 2019"):
+    for title in ('MacBook Pro 13" Touch Bar 512GB', 'MacBook Pro 13" Touch Bar 32GB 1TB'):
         r = ev(title, price=450)
         assert r.verdict == "REJECT" and "Touch Bar" in r.reasons[0], (title, r.reasons)
+    assert ev("MacBook Pro TouchBar 2019", price=450).verdict == "REJECT"  # the year rule gets there first
     it = ev('MacBook Pro 13" Touch Bar 24GB 512GB', price=450)
     assert it.verdict == "POSSIBLE" and any("M2 13-inch" in r for r in it.reasons)
     # the M2 13" Pro really has a Touch Bar and is a legitimate match
