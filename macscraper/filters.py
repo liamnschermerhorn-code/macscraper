@@ -198,6 +198,17 @@ GHZ_RE = re.compile(r"\b\d\.\d{1,2}\s?GHz\b", re.I)
 GRAY_RE = re.compile(r"\b(space\s*)?gr[ae]y\b", re.I)
 
 
+# 15" MacBook Pros are all Intel: Apple Silicon Pros are 13", 14" and 16". (15" Airs are fine.)
+_INCH = r"(?:[\"”″]|'{2}|-?\s?inch)"
+PRO_15_RE = re.compile(
+    r"mac\s?book\s*pro[^0-9]{0,15}\b15(?:\.\d)?\s?" + _INCH + r"|\b15(?:\.\d)?\s?" + _INCH + r"\s*(?:apple\s+)?mac\s?book\s*pro",
+    re.I,
+)
+# Apple custom-configuration numbers like Z0V10001W / Z0W200042. Z0xx numbers predate the first M1
+# Mac (late 2020). Inferred pattern from observed listings, not an Apple-published rule.
+OLD_CTO_RE = re.compile(r"\bZ0[A-Z0-9]{5,8}\b", re.I)
+
+
 def find_chips(text: str) -> set[str]:
     chips = set()
     for m in CHIP_RE.finditer(text):
@@ -305,12 +316,24 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
         else:
             reasons.append("chip not stated")
 
+    # --- older-Mac giveaways (no chip named in them) ---
+    spec_conflict = False
+    old_hint = None
+    if PRO_15_RE.search(text):
+        old_hint = "15-inch MacBook Pro - Apple Silicon never made one, so it's Intel"
+    elif m := OLD_CTO_RE.search(text):
+        old_hint = f"custom-config number {m.group(0).upper()} is from before the M1 era (Intel)"
+    if old_hint:
+        if not chips:
+            return reject(old_hint)
+        spec_conflict = True
+        reasons.insert(0, f"!! {old_hint}, but the listing names {item.chip} - likely mislabeled, verify")
+
     # --- serial number (when the seller wrote one) ---
-    serial_conflict = False
     if serial_is_pre_m2(find_serial(text)):
         if not chip_known:
             return reject("serial number format means a pre-2021 Mac (Intel or M1)")
-        serial_conflict = True
+        spec_conflict = True
         reasons.insert(0, "!! serial number looks like an old Intel/M1 Mac but the listing says "
                           f"{item.chip} - likely mislabeled, verify before buying")
 
@@ -392,7 +415,7 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
     confirmed = (
         chip_known and ram_known and price_known and item.shipping is not None
         and not item.is_auction and not item.price_is_range and not desc_flags
-        and not item.sold_note and not stale and not serial_conflict
+        and not item.sold_note and not stale and not spec_conflict
     )
     item.verdict = "MATCH" if confirmed else "POSSIBLE"
 
@@ -407,7 +430,7 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
     score -= 0 if ram_known else 20
     score -= 10 if item.is_auction else 0
     score -= 25 if desc_flags else 0
-    score -= 30 if serial_conflict else 0
+    score -= 30 if spec_conflict else 0
     score -= 20 if item.sold_note else 0
     score -= 10 if stale else 0
     score -= c.mini_penalty if is_mini else 0

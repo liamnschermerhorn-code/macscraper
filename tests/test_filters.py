@@ -221,3 +221,21 @@ def test_intel_giveaways_without_the_word_intel():
     assert ev("Mac mini M2 A2686 24GB 512GB").verdict == "MATCH"
     assert ev("MacBook Air M2 24GB 512GB Space Gray").verdict == "MATCH"  # gray is normal on laptops
     assert ev("Mac mini M2 Pro 32GB silver").verdict == "MATCH"
+
+
+def test_15_inch_macbook_pro_and_old_custom_config_number():
+    # the listing that slipped through
+    it = ev('MacBook Pro 15" Upgraded - 32GB -1TB -Z0V10001W', price=450)
+    assert it.verdict == "REJECT" and "15-inch" in it.reasons[0]
+    assert ev("Apple MacBook Pro 15-inch 32GB 1TB").verdict == "REJECT"
+    assert ev('15" MacBook Pro 32GB 1TB').verdict == "REJECT"
+    assert ev("MacBook Pro 15.4 inch 32GB").verdict == "REJECT"
+    assert "Z0V10001W" in ev("MacBook Pro 32GB 1TB Z0V10001W").reasons[0]
+    # these must keep working
+    assert ev('MacBook Air 15" M2 24GB 512GB').verdict == "MATCH"
+    assert ev('MacBook Pro 16" M2 Pro 32GB 1TB').verdict == "MATCH"
+    assert ev("MacBook Pro 14 M3 Pro 32GB 1TB, 15 cycles").verdict == "MATCH"
+    # chip named but a giveaway disagrees -> flagged, never a clean MATCH
+    for title in ('MacBook Pro 15" M2 32GB 1TB', "MacBook Pro M2 32GB 1TB Z0V10001W"):
+        it = ev(title)
+        assert it.verdict == "POSSIBLE" and it.reasons[0].startswith("!!"), (title, it.reasons)
