@@ -444,8 +444,9 @@ def prompt_facebook(crit: Criteria, ask=None, say=None, open_url=None, read=None
     for name, url in searches.items():
         say(f"  • {name.removeprefix('Facebook Marketplace - ')}")
         open_url(url)
-    say("\nIn each tab: [bold]scroll to the very bottom[/] (so every listing loads), then press [bold]Cmd+S[/] and choose\n"
-        "Format: [bold]Webpage, Complete[/], and save it anywhere.\n"
+    say("\nIn each tab: [bold]scroll to the very bottom[/] (so every listing loads), then press [bold]Cmd+S[/] and choose a format:\n"
+        "  Safari: [bold]Web Archive[/] (not Page Source)    Chrome / Firefox: [bold]Webpage, Complete[/]\n"
+        "Save it anywhere.\n"
         "Then [bold]drag each saved file into this window[/] and press Enter. Press Enter on an empty line when you're done.\n")
     saved: list[str] = []
     while True:
@@ -461,8 +462,8 @@ def prompt_facebook(crit: Criteria, ask=None, say=None, open_url=None, read=None
                 saved.append(str(path))
                 say(f"  [green]✓[/] {path.name}: {n} listings")
             else:
-                say(f"  [yellow]![/] {path.name}: no listings in it. Scroll down to load them, then save as 'Webpage, Complete'. "
-                    "(Was it saved as 'HTML only'?) Try again.")
+                say(f"  [yellow]![/] {path.name}: no listings in it. Scroll down to load them, then save as 'Web Archive' (Safari) "
+                    "or 'Webpage, Complete' (Chrome/Firefox), not 'Page Source' / 'HTML only'. Try again.")
     say(f"Got {len(saved)} saved page(s).\n" if saved else "No pages added - continuing without Facebook.\n")
     return saved
 

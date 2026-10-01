@@ -156,11 +156,25 @@ def dropped_paths(text: str) -> list[Path]:
 
 
 
+PAGE_SUFFIXES = (".html", ".htm", ".webarchive")
+
+
+def read_page(path: Path) -> str:
+    """The page's HTML. A Safari Web Archive (.webarchive) is a property list with the page inside it."""
+    if path.suffix.lower() == ".webarchive":
+        import plistlib
+
+        main = plistlib.loads(path.read_bytes()).get("WebMainResource", {})
+        raw = main.get("WebResourceData") or b""
+        return bytes(raw).decode(main.get("WebResourceTextEncodingName") or "utf-8", errors="ignore")
+    return path.read_text(errors="ignore")
+
+
 def find_pages(paths: list[str | Path]) -> list[Path]:
     files: list[Path] = []
     for p in map(Path, paths):
         if p.is_dir():
-            files += sorted(f for f in p.rglob("*") if f.suffix.lower() in (".html", ".htm") and f.is_file())
+            files += sorted(f for f in p.rglob("*") if f.suffix.lower() in PAGE_SUFFIXES and f.is_file())
         elif p.is_file():
             files.append(p)
     return files
@@ -174,8 +188,8 @@ def load(paths: list[str | Path], log=lambda *_: None) -> list[Listing]:
     # Newest file first, so when a listing is in several saved pages the freshest snapshot is the one kept.
     for f in sorted(files, key=lambda f: f.stat().st_mtime, reverse=True):
         try:
-            page = parse_page(f.read_text(errors="ignore"))
-        except OSError as e:
+            page = parse_page(read_page(f))
+        except Exception as e:  # unreadable or not really a web archive
             log(f"[facebook] couldn't read {f.name}: {e}")
             continue
         age = (time.time() - f.stat().st_mtime) / 86400
@@ -184,5 +198,5 @@ def load(paths: list[str | Path], log=lambda *_: None) -> list[Listing]:
                 it.condition = f"from a page you saved {age:.0f} days ago - may be sold"
             items.setdefault(it.key, it)
         log(f"[facebook] {f.name}: {len(page)} listings" if page else
-            f"[facebook] {f.name}: no listings found - scroll down to load them, then save as 'Webpage, Complete'")
+            f"[facebook] {f.name}: no listings found - scroll down to load them, then save as 'Web Archive' (Safari) or 'Webpage, Complete' (Chrome/Firefox)")
     return list(items.values())

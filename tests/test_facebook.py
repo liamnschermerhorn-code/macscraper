@@ -140,3 +140,43 @@ def test_dropped_files_reach_the_run_and_the_folder_still_counts(tmp_path, monke
     items = cli.collect(args, {}, Criteria(max_total=700))
     titles = {i.title for i in items}
     assert "Apple MacBook Air M2 24GB 512GB" in titles and "MacBook Air M2 24GB 1TB – like new" in titles   # dropped file + folder
+
+
+# ---- Safari Web Archives -------------------------------------------------------------------------------
+
+def make_webarchive(path, html, encoding="UTF-8"):
+    import plistlib
+    path.write_bytes(plistlib.dumps({
+        "WebMainResource": {"WebResourceData": html.encode("utf-8"), "WebResourceMIMEType": "text/html",
+                            "WebResourceTextEncodingName": encoding, "WebResourceURL": "https://www.facebook.com/marketplace/chicago/search?query=macbook"},
+        "WebSubresources": [{"WebResourceData": b"\x89PNG", "WebResourceMIMEType": "image/png", "WebResourceURL": "https://x/a.png"}],
+    }, fmt=plistlib.FMT_BINARY))
+
+
+def test_safari_web_archives_are_read(tmp_path):
+    archive = tmp_path / "macbook - Marketplace.webarchive"
+    make_webarchive(archive, CARDS + EMBEDDED)
+    items = {i.key.split("/")[-2]: i for i in facebook.load([archive])}
+    assert len(items) == 5 and items["1111111111111"].price == 650.0 and items["7777777777777"].location == "Hammond, IN"
+    assert facebook.load([tmp_path])[0].source == "facebook"                         # a folder picks up .webarchive files too
+    assert {i.key for i in facebook.load([tmp_path])} == {i.key for i in facebook.load([archive])}
+
+    logs = []
+    broken = tmp_path / "broken.webarchive"
+    broken.write_bytes(b"this is not a property list")
+    assert facebook.load([broken], lambda *a, **k: logs.append(" ".join(map(str, a)))) == []
+    assert "couldn't read broken.webarchive" in logs[0]                               # reported, not a crash
+    nopage = tmp_path / "nopage.webarchive"
+    import plistlib
+    nopage.write_bytes(plistlib.dumps({"WebSubresources": []}))
+    logs.clear()
+    facebook.load([nopage], lambda *a, **k: logs.append(" ".join(map(str, a))))
+    assert "no listings found" in logs[0] and "Web Archive" in logs[0]                 # the hint names Safari's format
+
+
+def test_dropping_a_web_archive_in_the_startup_conversation(tmp_path):
+    archive = tmp_path / "search one.webarchive"
+    make_webarchive(archive, CARDS)
+    saved, said, _ = run_prompt(tmp_path, [str(archive).replace(" ", "\\ "), ""])
+    assert saved == [str(archive)] and "search one.webarchive: 4 listings" in said
+    assert "Safari" in said and "Web Archive" in said and "Webpage, Complete" in said and "not Page Source" in said

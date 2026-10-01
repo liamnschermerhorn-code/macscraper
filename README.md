@@ -78,7 +78,8 @@ sets how many photos per listing (default 6).
 
 The scraper never contacts Facebook, but it can read Marketplace pages **you** saved. In your browser, search
 Marketplace (set your city and radius), **scroll down** to load more listings, then save the page: Chrome / Edge /
-Firefox: **Cmd+S → Format: "Webpage, Complete"** (not "HTML only"). You don't have to remember any of this: **at startup the scraper offers to do it with you**. It opens the Marketplace
+Firefox: **Cmd+S → Format: "Webpage, Complete"**; Safari: **File → Save As → Format: "Web Archive"** (not "Page Source" / "HTML only",
+which save the page before its listings load). You don't have to remember any of this: **at startup the scraper offers to do it with you**. It opens the Marketplace
 searches in your browser, waits while you scroll and save each page, and reads every file you **drag into the terminal**
 (telling you at once how many listings it found). `--no-facebook` skips the question. You can also just keep files in
 the `marketplace/` folder (read on every run) or pass them: `uv run macscraper --import saved.html`.
