@@ -256,3 +256,21 @@ def test_year_and_intel_wording_checks():
     it = ev("MacBook Air M2 24GB 512GB 2019")
     assert it.verdict == "POSSIBLE" and it.reasons[0].startswith("!!")
     assert ev("MacBook Air 2022 24GB 512GB").verdict == "POSSIBLE"  # year-inferred chip stays POSSIBLE
+
+
+def test_part_listings_and_impossible_prices_rejected():
+    # the listing that slipped through: a trackpad for a MacBook Pro
+    it = ev('Macbook Pro M4 Pro 14 Inch A3401 / M4 14" A3112 Original Touchpad Silver', price=168.30, negotiable=True)
+    assert it.verdict == "REJECT" and "part" in it.reasons[0]
+    for title in ("MacBook Pro M3 Pro 14 Speakers Left Right", "MacBook Air M2 Webcam Flex Cable",
+                  "MacBook Pro M3 Max 16 Charging Board", "MacBook Air M2 Original Battery"):
+        assert ev(title, price=300).verdict == "REJECT", title
+    # spec-heavy titles of real Macs (they state the RAM) are not parts
+    assert ev("MacBook Air M2 24GB 512GB Force Touch trackpad 4-speaker", price=450).verdict == "MATCH"
+    # even without the word "touchpad", a Pro chip at $168 is not a whole Mac
+    it = ev("MacBook Pro 14 M4 Pro 24GB 512GB Silver", price=168.30)
+    assert it.verdict == "REJECT" and "cheap" in it.reasons[0]
+    assert "too cheap for a M4 Pro" in ev("MacBook Pro 14 M4 Pro 24GB", price=300).reasons[0]
+    # real machines and auctions are unaffected
+    assert ev("MacBook Air M2 24GB 512GB", price=300).verdict == "MATCH"
+    assert ev("MacBook Pro 14 M4 Pro 24GB", price=120, is_auction=True).verdict == "POSSIBLE"

@@ -344,7 +344,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--config", type=Path, default=None, help="use only this settings file (default: settings.toml + config.local.toml)")
     p.add_argument("--sources", default=None, help="comma list: ebay,craigslist,reddit")
     p.add_argument("--max", type=float, default=None, help="max total price incl. shipping (default 500)")
-    p.add_argument("--min", type=float, default=None, help="ignore listings cheaper than this (default 150)")
+    p.add_argument("--min", type=float, default=None, help="ignore listings cheaper than this (default 250)")
     p.add_argument("--stretch", type=float, default=None, help="keep negotiable listings up to this much over budget (default 75, 0 = off)")
     p.add_argument("--cl-sites", default=None, help="your local craigslist subdomains, e.g. sfbay,sacramento")
     p.add_argument("--auctions", action="store_true", default=None, help="include auctions (skips the question)")
@@ -366,7 +366,7 @@ def main(argv: list[str] | None = None) -> None:
     pick = lambda cli, key, default: cli if cli is not None else cfg.get(key, default)  # noqa: E731
     crit = Criteria(
         max_total=pick(args.max, "max_total", 500.0),
-        min_price=pick(args.min, "min_price", 150.0),
+        min_price=pick(args.min, "min_price", 250.0),
         offer_stretch=pick(args.stretch, "offer_stretch", 75.0),
         chips=tuple(cfg.get("chips", ("M2", "M3", "M4"))),
         ram_options=tuple(cfg.get("ram_options", (24, 32))),

@@ -17,7 +17,9 @@ from .models import Listing
 @dataclass
 class Criteria:
     max_total: float = 500.0
-    min_price: float = 150.0  # anything cheaper is almost always an accessory, a scam or a box
+    min_price: float = 250.0  # anything cheaper is almost always a part, an accessory, a scam or a box
+    # A Pro/Max/Ultra chip never sells this cheap as a whole working Mac (parts, scams, mislabels).
+    min_price_pro: float = 350.0
     chips: tuple[str, ...] = ("M2", "M3", "M4")
     ram_options: tuple[int, ...] = (24, 32)
     allow_auctions: bool = True
@@ -124,7 +126,16 @@ PART_RE = re.compile(
     r"top\s*case|bottom\s*case|lower\s*case|upper\s*case|palm\s*rest|chassis|housing|enclosure|"
     r"(lcd|display|screen|retina)\s+(assembly|panel|replacement)|lcd|"
     r"replacement\s+(screen|battery|keyboard|display|part)|battery\s+(for|replacement)|"
-    r"heat\s*sink|trackpad|hinge|donor|a\d{4}\s+board|parts?\s+(lot|unit|machine))\b",
+    r"heat\s*sink|hinge|donor|a\d{4}\s+board|parts?\s+(lot|unit|machine)|"
+    r"(i/?o|charging|power|usb[-\s]?c)\s+board|power\s+button)\b",
+    re.I,
+)
+# Component words that also show up in genuine spec-heavy titles ("Force Touch trackpad", "6-speaker
+# sound system"). A whole Mac's title states its RAM; a part listing usually doesn't, so these only
+# count as a part when no RAM size is given.
+WEAK_PART_RE = re.compile(
+    r"\b(track\s*pad|touch\s*pad|speakers?|web\s*cam|camera\s+module|flex\s+cable|"
+    r"original\s+(keyboard|battery|screen|display|fan|logic))\b",
     re.I,
 )
 # Add-ons that are fine when they come *with* a Mac ("MacBook Air M2 24GB with charger")
@@ -285,6 +296,8 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
     is_mini = bool(kinds) and kinds <= {"mac mini", "mac studio"}  # desktop
     if m := PART_RE.search(title):
         return reject(f"part, not a whole computer ({m.group(0)})")
+    if (m := WEAK_PART_RE.search(title)) and not find_ram(title):
+        return reject(f"part, not a whole computer ({m.group(0)}, no RAM size given)")
     if FOR_MAC_RE.search(title) or is_accessory(title):
         return reject("looks like an accessory")
 
@@ -408,7 +421,9 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
         ship = item.shipping if item.shipping is not None else c.assumed_shipping
         total = item.price + ship
         if item.price < c.min_price and not item.is_auction:
-            return reject(f"${item.price:.0f} is suspiciously cheap (accessory/scam?)")
+            return reject(f"${item.price:.0f} is suspiciously cheap (part/accessory/scam?)")
+        if " " in item.chip.rstrip("?") and item.price < c.min_price_pro and not item.is_auction:
+            return reject(f"${item.price:.0f} is far too cheap for a {item.chip} (part/scam/mislabeled?)")
         if total > c.max_total:
             over = total - c.max_total
             if not (item.negotiable and over <= c.offer_stretch):
