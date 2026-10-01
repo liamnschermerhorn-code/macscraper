@@ -1,4 +1,6 @@
-# Copy to config.toml and edit. Every key is optional; command-line flags win.
+# Shared settings: `git pull` updates this file, and the scraper reads it automatically.
+# To override something just for you (or keep a private ntfy topic), put it in config.local.toml,
+# which git never touches and which wins over this file. Command-line flags win over both.
 
 max_total = 500        # dollars, including shipping (was 700 - change back here when you want)
 min_price = 150        # cheaper than this = accessory / scam / empty box
@@ -25,7 +27,7 @@ max_distance_miles = 40
 craigslist_ship_sites = ["indianapolis", "milwaukee", "detroit", "newyork", "losangeles", "sfbay", "seattle", "boston"]
 
 # Free phone push notifications: install the ntfy app, subscribe to a hard-to-guess topic.
-# ntfy_topic = "mac-hunt-change-me-8k2j"
+# (put your ntfy_topic in config.local.toml, not here)
 
 # Extra words that should disqualify a listing (regex, case-insensitive).
 extra_red_flags = ["dent", "bent"]

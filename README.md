@@ -1,7 +1,7 @@
 # macscraper
 
 Searches eBay, Craigslist and r/appleswap for an **Apple Silicon MacBook, Mac mini or Mac Studio (M2/M3/M4, any variant) with 24 or 32 GB RAM,
-fully working, ≤ $500 delivered** (change `max_total` in `config.toml`). It sorts every listing into:
+fully working, ≤ $500 delivered** (change `max_total` in `settings.toml`). It sorts every listing into:
 
 | Verdict | Meaning |
 |---|---|
@@ -14,12 +14,13 @@ fully working, ≤ $500 delivered** (change `max_total` in `config.toml`). It so
 ```sh
 brew install uv            # if you don't have it
 git clone <this repo> && cd macscraper
-cp config.example.toml config.toml   # set your local Craigslist city (and ZIP) here
-uv run macscraper                     # one pass, opens nothing, prints a table
+uv run macscraper                     # settings come from settings.toml (updated by git pull)
+                                      # your own overrides go in config.local.toml
+# one pass, opens nothing, prints a table
 open results/report.html              # clickable report, also results.csv / results.json
 ```
 
-Each run starts by asking two questions (press Enter to keep the default from `config.toml`):
+Each run starts by asking two questions (press Enter to keep the default from `settings.toml`):
 
 ```
 Include auctions? (current bid, final price will be higher) [Y/n]
@@ -34,11 +35,18 @@ uv run macscraper --deep                     # open each candidate page to read 
 uv run macscraper --watch 20 --ntfy my-topic # re-check every 20 min, push NEW matches to your phone (ntfy app)
 uv run macscraper --cl-sites sfbay,sacramento
 uv run macscraper --stretch 0 --no-auctions  # strictly ≤ budget, fixed price only (no questions)
-uv run macscraper --no-ask                   # skip the questions, use config.toml
+uv run macscraper --no-ask                   # skip the questions, use the settings files
 uv run macscraper --loose                    # also keep listings that state neither chip nor RAM
 ```
 
 `results/seen.json` remembers what you've already seen, so the report and alerts mark only new listings as **NEW**.
+
+### Settings
+
+`settings.toml` is part of the repo, so `git pull` brings in the latest settings (budget, cities, models...).
+To change something only on your machine, create `config.local.toml` with just those lines, e.g.
+`max_total = 600` or `ntfy_topic = "my-private-topic"`. It overrides `settings.toml` and git never touches it.
+An old `config.toml` is no longer read.
 
 ### Craigslist: local or ships
 

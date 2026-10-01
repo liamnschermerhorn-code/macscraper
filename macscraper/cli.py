@@ -32,10 +32,20 @@ DEFAULT_REDDIT_QUERIES = ["24GB", "32GB", "M2", "M3", "M4"]
 DEFAULT_CL_SHIP_SITES = ["sfbay", "losangeles", "newyork", "chicago", "seattle", "boston"]
 
 
-def load_config(path: Path | None) -> dict:
-    if path and path.exists():
-        return tomllib.loads(path.read_text())
-    return {}
+SETTINGS_FILES = [Path("settings.toml"), Path("config.local.toml")]
+
+
+def load_config(path: Path | None = None) -> dict:
+    """settings.toml (shared, updated by git pull) overlaid with config.local.toml (yours, never
+    touched by git). `--config FILE` loads just that one file instead."""
+    merged: dict = {}
+    for p in [path] if path else SETTINGS_FILES:
+        if p.exists():
+            merged |= tomllib.loads(p.read_text())
+    if not path and Path("config.toml").exists():
+        console.log("note: config.toml is no longer used - settings now live in settings.toml "
+                    "(put personal overrides in config.local.toml)")
+    return merged
 
 
 def manual_links(max_total: float) -> dict[str, str]:
@@ -314,7 +324,7 @@ def ask_preferences(crit: Criteria, ask_auctions: bool = True, ask_stretch: bool
 
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description="Find M2/M3/M4 Macs with 24/32GB RAM under budget.")
-    p.add_argument("--config", type=Path, default=Path("config.toml"))
+    p.add_argument("--config", type=Path, default=None, help="use only this settings file (default: settings.toml + config.local.toml)")
     p.add_argument("--sources", default=None, help="comma list: ebay,craigslist,reddit")
     p.add_argument("--max", type=float, default=None, help="max total price incl. shipping (default 500)")
     p.add_argument("--min", type=float, default=None, help="ignore listings cheaper than this (default 150)")

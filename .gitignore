@@ -3,5 +3,6 @@ __pycache__/
 *.egg-info/
 results/
 .seen.json
+config.local.toml
 config.toml
 *.zip
