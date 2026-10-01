@@ -16,7 +16,7 @@ from .models import Listing
 
 @dataclass
 class Criteria:
-    max_total: float = 500.0
+    max_total: float = 700.0
     min_price: float = 250.0  # anything cheaper is almost always a part, an accessory, a scam or a box
     # A Pro/Max/Ultra chip never sells this cheap as a whole working Mac (parts, scams, mislabels).
     min_price_pro: float = 350.0

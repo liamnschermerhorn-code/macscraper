@@ -1,7 +1,7 @@
 # macscraper
 
 Searches eBay, Craigslist and r/appleswap for an **Apple Silicon MacBook (M2/M3/M4, any variant; `models` in `settings.toml` can add Mac mini / Mac Studio) with 24, 32, 64 or 128 GB RAM (`ram_options`),
-fully working, ≤ $500 delivered** (change `max_total` in `settings.toml`). It sorts every listing into:
+fully working, ≤ $700 delivered** (change `max_total` in `settings.toml`). It sorts every listing into:
 
 | Verdict | Meaning |
 |---|---|
@@ -24,8 +24,8 @@ Each run starts by asking two questions (press Enter to keep the default from `s
 
 ```
 Include auctions? (current bid, final price will be higher) [Y/n]
-Include flexible prices? (Best Offer / local listings a bit over $500 you could negotiate down) [Y/n]
-  How far over $500 is OK? [$75]
+Include flexible prices? (Best Offer / local listings a bit over $700 you could negotiate down) [Y/n]
+  How far over $700 is OK? [$75]
 ```
 
 Useful flags:

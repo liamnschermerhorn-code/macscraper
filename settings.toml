@@ -2,7 +2,7 @@
 # To override something just for you (or keep a private ntfy topic), put it in config.local.toml,
 # which git never touches and which wins over this file. Command-line flags win over both.
 
-max_total = 500        # dollars, including shipping (was 700 - change back here when you want)
+max_total = 700        # dollars, including shipping
 min_price = 250        # cheaper than this = part / accessory / scam / empty box (auctions exempt)
 offer_stretch = 75     # default for "Include flexible prices?": keep Best Offer/local listings up to $75 over budget; 0 = no
 chips = ["M2", "M3", "M4"]
