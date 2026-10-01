@@ -16,7 +16,7 @@ from .models import Listing
 
 @dataclass
 class Criteria:
-    max_total: float = 700.0
+    max_total: float = 500.0
     min_price: float = 150.0  # anything cheaper is almost always an accessory, a scam or a box
     chips: tuple[str, ...] = ("M2", "M3", "M4")
     ram_options: tuple[int, ...] = (24, 32)

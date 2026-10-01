@@ -1,7 +1,7 @@
 # macscraper
 
 Searches eBay, Craigslist and r/appleswap for an **Apple Silicon MacBook, Mac mini or Mac Studio (M2/M3/M4, any variant) with 24 or 32 GB RAM,
-fully working, ≤ $700 delivered**. It sorts every listing into:
+fully working, ≤ $500 delivered** (change `max_total` in `config.toml`). It sorts every listing into:
 
 | Verdict | Meaning |
 |---|---|
@@ -23,8 +23,8 @@ Each run starts by asking two questions (press Enter to keep the default from `c
 
 ```
 Include auctions? (current bid, final price will be higher) [Y/n]
-Include flexible prices? (Best Offer / local listings a bit over $700 you could negotiate down) [Y/n]
-  How far over $700 is OK? [$75]
+Include flexible prices? (Best Offer / local listings a bit over $500 you could negotiate down) [Y/n]
+  How far over $500 is OK? [$75]
 ```
 
 Useful flags:
@@ -33,7 +33,7 @@ Useful flags:
 uv run macscraper --deep                     # open each candidate page to read specs + seller description (slower, better)
 uv run macscraper --watch 20 --ntfy my-topic # re-check every 20 min, push NEW matches to your phone (ntfy app)
 uv run macscraper --cl-sites sfbay,sacramento
-uv run macscraper --stretch 0 --no-auctions  # strictly ≤ $700, fixed price only (no questions)
+uv run macscraper --stretch 0 --no-auctions  # strictly ≤ budget, fixed price only (no questions)
 uv run macscraper --no-ask                   # skip the questions, use config.toml
 uv run macscraper --loose                    # also keep listings that state neither chip nor RAM
 ```

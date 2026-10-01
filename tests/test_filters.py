@@ -3,7 +3,7 @@ import pytest
 from macscraper.filters import Criteria, evaluate, find_chips, find_ram, red_flags
 from macscraper.models import Listing
 
-C = Criteria()
+C = Criteria(max_total=700)
 
 
 def ev(title, price=600.0, shipping=0.0, **kw):
