@@ -2,6 +2,7 @@
 e.g. sfbay, newyork, chicago, seattle, boston, losangeles)."""
 from __future__ import annotations
 
+import re
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlencode
 
@@ -77,7 +78,26 @@ def _search_site(client: httpx.Client, site: str, local: bool, queries: list[str
     return results
 
 
+# Photos: https://images.craigslist.org/00a0a_abc123_600x450.jpg (sizes vary; 1200x900 is the large one).
+CL_IMAGE_RE = re.compile(r"https://images\.craigslist\.org/([\w-]+)_\d+x\d+c?\.jpg")
+
+
+def image_urls(html: str, limit: int = 12) -> list[str]:
+    seen, out = set(), []
+    for m in CL_IMAGE_RE.finditer(html):
+        if m.group(1) not in seen:
+            seen.add(m.group(1))
+            out.append(f"https://images.craigslist.org/{m.group(1)}_1200x900.jpg")
+    return out[:limit]
+
+
 def item_details(client: httpx.Client, url: str) -> str:
-    soup = BeautifulSoup(get(client, url).text, "html.parser")
+    return item_page(client, url)[0]
+
+
+def item_page(client: httpx.Client, url: str) -> tuple[str, list[str]]:
+    r = get(client, url)
+    soup = BeautifulSoup(r.text, "html.parser")
     parts = [el.get_text(" ", strip=True) for el in soup.select(".attrgroup, #postingbody")]
-    return " \n ".join(p.replace("QR Code Link to This Post", "") for p in parts)
+    text = " \n ".join(p.replace("QR Code Link to This Post", "") for p in parts)
+    return text, image_urls(r.text)

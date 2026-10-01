@@ -1,6 +1,7 @@
 """r/appleswap: posts look like "[USA-CA] [H] MacBook Air M2 24GB/512GB [W] PayPal, Local Cash"."""
 from __future__ import annotations
 
+import html
 import re
 import time
 from urllib.parse import urlencode
@@ -101,6 +102,20 @@ BARE_PRICE_RE = re.compile(
 )
 
 
+def post_images(p: dict, limit: int = 12) -> list[str]:
+    """Photo URLs Reddit hands us in the post's JSON (galleries, previews) plus direct imgur links."""
+    urls = []
+    for meta in (p.get("media_metadata") or {}).values():
+        src = meta.get("s") or {}
+        if u := src.get("u") or src.get("gif"):
+            urls.append(html.unescape(u))
+    for img in (p.get("preview") or {}).get("images", []):
+        if u := img.get("source", {}).get("url"):
+            urls.append(html.unescape(u))
+    urls += re.findall(r"https?://i\.imgur\.com/\w+\.(?:jpe?g|png)", p.get("selftext") or "")
+    return list(dict.fromkeys(urls))[:limit]
+
+
 def _prices(text: str, floor: float) -> list[float]:
     vals = []
     for m in PRICE_RE.finditer(text):
@@ -149,6 +164,7 @@ def parse_posts(data: dict, min_price: float) -> list[Listing]:
             item.sold_note = "part of this post is crossed out / marked sold - make sure the Mac isn't"
         if p.get("created_utc"):
             item.age_days = (time.time() - float(p["created_utc"])) / 86400
+        item.images = post_images(p)
         item.meta = {"id": p.get("id", ""), "author": p.get("author", ""), "n_prices": len(set(prices))}
         if len(set(prices)) > 1:
             item.condition = f"post lists several prices: {', '.join(f'${v:.0f}' for v in sorted(set(prices)))}"

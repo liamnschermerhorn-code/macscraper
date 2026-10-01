@@ -25,6 +25,7 @@ class Listing:
     sold: bool = False
     age_days: float | None = None
     meta: dict = field(default_factory=dict)
+    images: list[str] = field(default_factory=list)  # photo URLs, for reading text out of them
 
     # Filled in by filters.evaluate()
     verdict: str = ""  # MATCH / POSSIBLE / REJECT

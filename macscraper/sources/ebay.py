@@ -259,8 +259,26 @@ def search(client: httpx.Client, queries: list[str], max_price: float, min_price
     return search_html(client, queries, max_price, min_price, log)
 
 
+# Gallery photos: https://i.ebayimg.com/images/g/<id>/s-l140.jpg (thumbnail) ... s-l1600.jpg (large).
+EBAY_IMAGE_RE = re.compile(r"https://i\.ebayimg\.com/(?:thumbs/)?images/g/([A-Za-z0-9~_-]+)/s-l\d+\.(?:jpg|jpeg|webp|png)")
+
+
+def image_urls(html: str, limit: int = 12) -> list[str]:
+    """The listing's own photos at full size, in page order, without duplicates."""
+    seen, out = set(), []
+    for m in EBAY_IMAGE_RE.finditer(html):
+        if m.group(1) not in seen:
+            seen.add(m.group(1))
+            out.append(f"https://i.ebayimg.com/images/g/{m.group(1)}/s-l1600.jpg")
+    return out[:limit]
+
+
 def item_details(client: httpx.Client, url: str) -> str:
-    """Condition notes, item specifics and seller description of one item page."""
+    return item_page(client, url)[0]
+
+
+def item_page(client: httpx.Client, url: str) -> tuple[str, list[str]]:
+    """Condition notes, item specifics and seller description of one item page, plus its photo URLs."""
     r = get(client, url)
     soup = BeautifulSoup(r.text, "html.parser")
     parts = []
@@ -278,4 +296,4 @@ def item_details(client: httpx.Client, url: str) -> str:
             parts.append(BeautifulSoup(d.text, "html.parser").get_text(" ", strip=True)[:6000])
         except httpx.HTTPError:
             pass
-    return " \n ".join(parts)
+    return " \n ".join(parts), image_urls(r.text)

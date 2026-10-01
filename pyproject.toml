@@ -13,6 +13,11 @@ dependencies = [
 [project.scripts]
 macscraper = "macscraper.cli:main"
 
+[project.optional-dependencies]
+ocr = [
+    "pyobjc-framework-vision>=10 ; sys_platform == 'darwin'",
+]
+
 [dependency-groups]
 dev = ["pytest>=8"]
 

@@ -22,6 +22,7 @@ from .filters import SHIP_REJECT, Criteria, evaluate
 from .http import client as make_client
 from .http import polite_pause
 from .models import Listing
+from . import ocr
 from .sources import craigslist, ebay, reddit
 
 console = Console(stderr=True)
@@ -137,9 +138,9 @@ def collect(args, cfg: dict, crit: Criteria) -> list[Listing]:
             """Fetch a listing's own page (specs / seller's words), then judge it again."""
             try:
                 if it.source == "ebay":
-                    it.description = ebay.item_details(c, it.url)
+                    it.description, it.images = ebay.item_page(c, it.url)
                 elif it.source.startswith("craigslist"):
-                    it.description = craigslist.item_details(c, it.url)
+                    it.description, it.images = craigslist.item_page(c, it.url)
                 else:
                     return
             except httpx.HTTPError as e:
@@ -172,7 +173,60 @@ def collect(args, cfg: dict, crit: Criteria) -> list[Listing]:
             todo = [it for it in items if it.verdict != "REJECT" and not it.description]
             log(f"deep-checking {len(todo)} candidate pages...")
             reopen_all(todo)
+
+        if args.ocr:
+            read_photos_step(c, items, crit, args, log)
     return items
+
+
+def read_photos_step(c: httpx.Client, items: list[Listing], crit: Criteria, args, log) -> None:
+    """Read the text in the photos of every POSSIBLE listing (About This Mac screenshots, model-number
+    stickers, serial labels) and judge those listings again with what the photos say."""
+    backend = ocr.get_backend()
+    if backend is None:
+        log("[ocr] no OCR engine found. On a Mac: `uv sync --extra ocr` (Apple Vision, free, on-device). "
+            "Elsewhere: `brew install tesseract` and `uv add pytesseract pillow`. Skipping photos.")
+        return
+    todo = [it for it in items if it.verdict == "POSSIBLE"]
+    if not todo:
+        return
+    log(f"[ocr] reading photos of {len(todo)} possible listings...")
+    stats = {"with_photos": 0, "with_text": 0, "changed": 0}
+
+    def work(it: Listing) -> None:
+        before = it.verdict
+        try:
+            if not it.images:  # eBay / Craigslist: the photos live on the listing's own page
+                if it.source == "ebay":
+                    it.description, it.images = ebay.item_page(c, it.url)
+                elif it.source.startswith("craigslist"):
+                    it.description, it.images = craigslist.item_page(c, it.url)
+            if not it.images:
+                return
+            stats["with_photos"] += 1
+            text = ocr.read_photos(c, it, backend, args.ocr_max_images, log)
+        except httpx.HTTPError as e:
+            log(f"  couldn't get photos for {it.url}: {e}")
+            return
+        if not text:
+            return
+        stats["with_text"] += 1
+        it.description = (it.description + " \n [photo text] " + text).strip()
+        it.reasons = []
+        evaluate(it, crit)
+        if it.verdict != "REJECT":
+            it.reasons.append("read from photos: " + text[:140])
+        if it.verdict != before:
+            stats["changed"] += 1
+
+    cl = [i for i in todo if not i.source == "ebay"]
+    eb = [i for i in todo if i.source == "ebay"]  # eBay pages one at a time (bot protection)
+    with ThreadPoolExecutor(max_workers=PAGE_WORKERS + 1) as pool:
+        futures = [pool.submit(work, i) for i in cl] + [pool.submit(lambda: [work(i) for i in eb])]
+        for f in futures:
+            f.result()
+    log(f"[ocr] {stats['with_photos']} listings had photos, text found in {stats['with_text']}, "
+        f"{stats['changed']} changed verdict")
 
 
 def load_seen(path: Path) -> dict[str, str]:
@@ -355,6 +409,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--cl-sites", default=None, help="your local craigslist subdomains, e.g. sfbay,sacramento")
     p.add_argument("--auctions", action="store_true", default=None, help="include auctions (skips the question)")
     p.add_argument("--no-auctions", dest="auctions", action="store_false", help="skip auctions (skips the question)")
+    p.add_argument("--ocr", action="store_true", default=None, help="read the text in listing photos (slower; Apple Vision on a Mac)")
+    p.add_argument("--no-ocr", dest="ocr", action="store_false", help="don't read photos even if settings.toml turns it on")
+    p.add_argument("--ocr-max-images", type=int, default=None, help="photos to read per listing (default 6)")
     p.add_argument("--no-tui", action="store_true", help="print a plain table instead of the live, resizable results screen")
     p.add_argument("--no-ask", action="store_true", help="don't ask questions at startup; use config/defaults")
     p.add_argument("--strict", action="store_true", help="drop listings that state neither chip nor RAM (default: keep them as POSSIBLE)")
@@ -370,6 +427,8 @@ def main(argv: list[str] | None = None) -> None:
     args.sources = args.sources or ",".join(cfg.get("sources", ["ebay", "craigslist", "reddit"]))
     args.ntfy = args.ntfy or cfg.get("ntfy_topic")
     args.deep = args.deep or cfg.get("deep", False)
+    args.ocr = cfg.get("ocr", False) if args.ocr is None else args.ocr
+    args.ocr_max_images = args.ocr_max_images or cfg.get("ocr_max_images", 6)
     pick = lambda cli, key, default: cli if cli is not None else cfg.get(key, default)  # noqa: E731
     crit = Criteria(
         max_total=pick(args.max, "max_total", 500.0),

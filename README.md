@@ -53,6 +53,19 @@ To change something only on your machine, create `config.local.toml` with just t
 `max_total = 600` or `ntfy_topic = "my-private-topic"`. It overrides `settings.toml` and git never touches it.
 An old `config.toml` is no longer read.
 
+### Reading the text in photos (`--ocr`)
+
+Titles often don't say what a listing is, but the photos do: an **About This Mac** screenshot shows the chip,
+memory and serial, and a photo of the underside shows the model number. With `--ocr` (or `ocr = true` in
+`settings.toml`) the scraper downloads the photos of every POSSIBLE listing, reads the text in them, and judges the
+listing again, so "Chip Apple M2 / Memory 24 GB" turns a POSSIBLE into a MATCH, and "Intel Core i7" rejects one.
+
+On a Mac it uses Apple's Vision text recognition (the engine behind Live Text): free, runs on your machine, nothing
+is uploaded. One-time setup: `uv sync --extra ocr`. Then `uv run macscraper --ocr`. (Elsewhere:
+`brew install tesseract` and `uv add pytesseract pillow`.) It only helps when the seller posted a screenshot or a
+readable label, and it makes the run slower (a page and several photos per possible listing); `--ocr-max-images`
+sets how many photos per listing (default 6).
+
 ### Craigslist: local or ships
 
 - **Local** (`craigslist_sites`, optionally within `max_distance_miles` of `home_zip`): every listing counts, as pickup.
