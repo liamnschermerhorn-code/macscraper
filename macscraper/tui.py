@@ -3,6 +3,7 @@ the title column stretches, optional columns drop out when space runs short, and
 pane moves from beside the list to beneath it on narrow windows."""
 from __future__ import annotations
 
+import re
 import webbrowser
 from pathlib import Path
 
@@ -27,6 +28,38 @@ def short_source(source: str) -> str:
     return SHORT_SOURCE.get(source, source)
 
 
+# ---- sorting by clicking a column heading --------------------------------------------------------------
+VERDICT_RANK = {"REJECT": 0, "POSSIBLE": 1, "MATCH": 2}
+CHIP_VARIANT = {"": 0, "pro": 1, "max": 2, "ultra": 3}
+COLUMN_LABELS = {"verdict": "Verdict", "total": "Total", "chip": "Chip", "ram": "RAM", "source": "Source", "title": "Title"}
+TEXT_COLUMNS = {"source", "title"}  # first click goes A->Z; the number columns go highest first
+
+
+def chip_rank(chip: str) -> int | None:
+    """M4 > M3 > M2, and within a generation Ultra > Max > Pro > plain. None if the chip is unknown."""
+    m = re.match(r"M(\d)\s*(pro|max|ultra)?", (chip or "").rstrip("?"), re.I)
+    return int(m.group(1)) * 10 + CHIP_VARIANT[(m.group(2) or "").lower()] if m else None
+
+
+SORT_KEYS = {
+    "verdict": lambda it: (VERDICT_RANK.get(it.verdict, 0), it.score),
+    "total": lambda it: it.total,
+    "chip": lambda it: chip_rank(it.chip),
+    "ram": lambda it: it.ram_gb,
+    "source": lambda it: short_source(it.source).lower(),
+    "title": lambda it: it.title.lower(),
+}
+
+
+def sort_listings(items: list[Listing], column: str, descending: bool) -> list[Listing]:
+    """Sort by one column. Listings with no value there (unknown chip, no price...) always go last,
+    whichever way round you sort. Ties keep their existing (best-first) order."""
+    key = SORT_KEYS[column]
+    keyed = [(key(i), i) for i in items]
+    known = sorted((p for p in keyed if p[0] is not None), key=lambda p: p[0], reverse=descending)
+    return [i for _, i in known] + [i for k, i in keyed if k is None]
+
+
 class FitTable(DataTable):
     """A DataTable that tells the app its real width once the layout has settled, so columns are
     sized for the room the table actually has now (not the room it had before the resize)."""
@@ -48,6 +81,12 @@ class ResultsApp(App):
         Binding("o", "open", "Open link"),
         Binding("c", "copy", "Copy link"),
         Binding("m", "matches_only", "Matches only"),
+        Binding("1", "sort('verdict')", "Sort 1-6", show=True),
+        Binding("2", "sort('total')", "", show=False),
+        Binding("3", "sort('chip')", "", show=False),
+        Binding("4", "sort('ram')", "", show=False),
+        Binding("5", "sort('source')", "", show=False),
+        Binding("6", "sort('title')", "", show=False),
         Binding("x", "reject", "Reject this"),
         Binding("u", "undo", "Undo reject"),
         Binding("r", "rejected", "Show rejected"),
@@ -62,6 +101,8 @@ class ResultsApp(App):
         self.rejected_path = rejected_path  # where your rejections are remembered (None: not saved)
         self.changed = False                # you rejected or restored something this session
         self.undo_stack: list[Listing] = []
+        self.sort_column: str | None = None  # None: the scraper's own best-first order
+        self.sort_descending = True
         self.matches_only = False
         self.show_rejected = False
         self.by_key: dict[str, Listing] = {}
@@ -93,8 +134,22 @@ class ResultsApp(App):
             if self.matches_only and it.verdict != "MATCH":
                 continue
             out.append(it)
+        if self.sort_column:
+            out = sort_listings(out, self.sort_column, self.sort_descending)
         return out
 
+    def action_sort(self, column: str) -> None:
+        """Sort by a column; choosing the same one again flips the order."""
+        if column == self.sort_column:
+            self.sort_descending = not self.sort_descending
+        else:
+            self.sort_column = column
+            self.sort_descending = column not in TEXT_COLUMNS  # numbers: highest first; text: A-Z first
+        self.rebuild()
+
+    def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
+        if event.column_key.value in SORT_KEYS:
+            self.action_sort(event.column_key.value)
     def rebuild(self, width: int | None = None) -> None:
         """(Re)draw the table to fit the room it currently has."""
         table = self.query_one("#list", DataTable)
@@ -109,15 +164,19 @@ class ResultsApp(App):
                 keep = None
 
         # (header, width) for the columns that always stay; extras appear as space allows.
-        cols = [("", 10), ("Total", 6), ("Chip", 8), ("RAM", 4)]
+        cols = [("verdict", 10), ("total", 8), ("chip", 8), ("ram", 6)]
         if width >= 70:
-            cols.append(("Source", 10))
+            cols.append(("source", 10))
         title_w = max(14, width - sum(w + 2 for _, w in cols) - 4)
 
+        def heading(key: str) -> str:  # the clicked column shows which way it's sorted
+            arrow = (" ▼" if self.sort_descending else " ▲") if key == self.sort_column else ""
+            return COLUMN_LABELS[key] + arrow
+
         table.clear(columns=True)
-        for name, w in cols:
-            table.add_column(name, width=w)
-        table.add_column("Title", width=title_w)
+        for key, w in cols:
+            table.add_column(heading(key), width=w, key=key)
+        table.add_column(heading("title"), width=title_w, key="title")
 
         rows = self.visible()
         self.by_key = {}
@@ -142,6 +201,7 @@ class ResultsApp(App):
         n_poss = sum(i.verdict == "POSSIBLE" for i in self.items)
         self.sub_title = (
             f"{len(rows)} shown · {n_match} match · {n_poss} possible"
+            + (f" · by {COLUMN_LABELS[self.sort_column].lower()} {'▼' if self.sort_descending else '▲'}" if self.sort_column else "")
             + (" · matches only" if self.matches_only else "")
             + (" · rejected shown" if self.show_rejected else "")
         )

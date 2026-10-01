@@ -41,7 +41,8 @@ uv run macscraper --strict                   # drop listings that state neither 
 
 When the run finishes you get a live results screen that reflows as you resize the window (wide: list plus a
 detail pane; narrow: the detail pane drops underneath). Keys: **↑/↓** move, **Enter** or **o** open the link,
-**c** copy it, **m** matches only, **x** reject the highlighted listing (see below), **u** undo, **r** show rejected
+**c** copy it, **click a column heading** (or press **1**-**6**) to sort by it, and click it again to flip the order,
+**m** matches only, **x** reject the highlighted listing (see below), **u** undo, **r** show rejected
 listings (with the reason), **q** quit. `--no-tui` (or
 `--watch`, or piping the output) prints a plain table instead; `results/report.html` is written either way.
 

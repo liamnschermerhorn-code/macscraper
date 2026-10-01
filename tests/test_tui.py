@@ -180,3 +180,96 @@ def test_rejections_apply_to_the_next_run_and_summary_lists_them(tmp_path):
     assert rejected.key_of("https://www.ebay.com/itm/999?hash=abc") in rejected.load(store)
     assert rejected.remove(store, "https://www.ebay.com/itm/999") is True
     assert rejected.remove(store, "https://www.ebay.com/itm/999") is False
+
+
+# ---- click a column heading to sort --------------------------------------------------------------------
+
+def sort_items():
+    crit = Criteria(max_total=700)
+    raw = [
+        ("MacBook Air 13 M2 24GB 512GB", 420, "ebay"),
+        ("MacBook Pro 14 M4 Pro 32GB 1TB", 690, "craigslist/chicago"),
+        ("MacBook Air 15 M3 24GB 512GB", 560, "ebay"),
+        ("MacBook Air 13 Midnight", 300, "reddit/appleswap"),        # chip and RAM not stated
+        ("MacBook Pro 16 M3 Max 32GB 1TB", 400, "ebay"),
+    ]
+    items = [evaluate(Listing(source=s, title=t, url=f"https://x/{n}", price=p, shipping=0.0), crit) for n, (t, p, s) in enumerate(raw)]
+    return [i for i in items if i.verdict != "REJECT"]
+
+
+def heading_x(app, key):
+    """Where to click to hit one column's heading (each column is its width + 2 cells of padding)."""
+    x = 0
+    for col_key, column in app.query_one("#list").columns.items():
+        if col_key.value == key:
+            return x + 3
+        x += column.width + 2
+    raise KeyError(key)
+
+
+def test_clicking_a_heading_sorts_and_clicking_again_flips_it():
+    async def go():
+        items = sort_items()
+        app = ResultsApp(items, set(), "")
+        async with app.run_test(size=(140, 30)) as pilot:
+            await pilot.pause()
+            table = app.query_one("#list")
+            start = [i.chip for i in app.visible()]
+
+            await pilot.click("#list", offset=(heading_x(app, "chip"), 0))   # click "Chip"
+            await pilot.pause()
+            chips = [i.chip for i in app.visible()]
+            assert chips == ["M4 Pro", "M3 Max", "M3", "M2", ""], chips      # highest at the top, unknown chip last
+            assert "▼" in str(table.columns[list(table.columns)[2]].label)
+
+            await pilot.click("#list", offset=(heading_x(app, "chip"), 0))   # again: highest at the bottom
+            await pilot.pause()
+            chips = [i.chip for i in app.visible()]
+            assert chips == ["M2", "M3", "M3 Max", "M4 Pro", ""], chips       # highest at the bottom; unknown still last
+            assert "▲" in str(table.columns[list(table.columns)[2]].label)
+
+            await pilot.click("#list", offset=(heading_x(app, "chip"), 0))   # a third click: back to highest first
+            await pilot.pause()
+            assert app.sort_descending is True
+            assert start != [i.chip for i in app.visible()]
+    run(go())
+
+
+def test_chip_order_variants_and_other_columns():
+    from macscraper.tui import chip_rank, sort_listings
+
+    assert chip_rank("M4 Pro") > chip_rank("M4") > chip_rank("M3 Max") > chip_rank("M3 Pro") > chip_rank("M3") > chip_rank("M2 Ultra") > chip_rank("M2")
+    assert chip_rank("M2?") == chip_rank("M2") and chip_rank("") is None and chip_rank(None) is None
+
+    async def go():
+        items = sort_items()
+        app = ResultsApp(items, set(), "")
+        async with app.run_test(size=(140, 30)) as pilot:
+            await pilot.pause()
+            for key in ("total", "ram", "title", "source", "verdict"):
+                await pilot.click("#list", offset=(heading_x(app, key), 0))
+                await pilot.pause()
+                assert app.sort_column == key
+                rows = app.visible()
+                if key == "total":
+                    prices = [i.total for i in rows]
+                    assert prices == sorted(prices, reverse=True)           # highest at the top first
+                    await pilot.click("#list", offset=(heading_x(app, "total"), 0))
+                    await pilot.pause()
+                    prices = [i.total for i in app.visible()]
+                    assert prices == sorted(prices)                          # flipped: highest at the bottom
+                if key == "title":
+                    names = [i.title.lower() for i in rows]
+                    assert names == sorted(names)                            # text goes A-Z first
+                if key == "ram":
+                    rams = [i.ram_gb for i in rows if i.ram_gb]
+                    assert rams == sorted(rams, reverse=True) and rows[-1].ram_gb is None   # unknown RAM last
+            await pilot.press("3")                                           # keyboard: 3 = chip
+            await pilot.pause()
+            assert app.sort_column == "chip" and app.sort_descending is True
+            await pilot.press("3")
+            await pilot.pause()
+            assert app.sort_descending is False
+        # sorting never loses or duplicates anything
+        assert sorted(i.key for i in app.visible()) == sorted(i.key for i in items)
+    run(go())
