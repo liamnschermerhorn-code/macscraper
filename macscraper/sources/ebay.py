@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import os
+import threading
 import random
 import re
 import time
@@ -93,6 +94,7 @@ def parse_search(html: str) -> list[Listing]:
                 shipping=shipping,
                 condition=cond.group(0) if cond else "",
                 location=loc.group(1).strip() if loc else "",
+                images=image_urls(str(card), 1),
                 is_auction=bool(BIDS_RE.search(text)) and "buy it now" not in text.lower(),
                 negotiable="best offer" in text.lower(),
                 price_is_range=bool(re.search(r"\$[\d,.]+\s*to\s*\$", price_text)),
@@ -157,25 +159,25 @@ def _run(client: httpx.Client, queries: list[str], max_price: float, min_price: 
     """Fetch every query (following pages while they stay full). Returns results and still-blocked queries."""
     results: list[Listing] = []
     headers = {"Referer": "https://www.ebay.com/"}
-    pending = list(queries)
-    blocked: list[str] = []
+    pending = [(q, 1) for q in queries]  # (query, page to start from)
+    blocked: list[tuple[str, int]] = []
     for round_ in range(2):  # second round retries whatever eBay blocked, after a long pause
         blocked = []
-        for q in pending:
-            for page in range(1, MAX_PAGES + 1):
+        for q, first_page in pending:
+            for page in range(first_page, MAX_PAGES + 1):
                 url = search_url(q, max_price, min_price, page)
                 try:
                     r = get(client, url, headers=headers, on_block=lambda: _warm_up(client))
                 except httpx.HTTPError as e:
                     status = getattr(getattr(e, "response", None), "status_code", None)
                     log(f"[ebay] {q!r} p{page}: blocked ({status or e})" + ("; will retry" if round_ == 0 else ""))
-                    blocked.append(q)
+                    blocked.append((q, page))  # the retry picks up here, not back at page 1
                     time.sleep(random.uniform(10, 20))
                     break
                 items = parse_search(r.text)
                 if not items and ("captcha" in r.text.lower() or "pardon our interruption" in r.text.lower()):
                     log(f"[ebay] {q!r}: bot check page" + ("; will retry" if round_ == 0 else ""))
-                    blocked.append(q)
+                    blocked.append((q, page))
                     break
                 log(f"[ebay] {q!r} p{page}: {len(items)} results")
                 results.extend(items)
@@ -190,7 +192,7 @@ def _run(client: httpx.Client, queries: list[str], max_price: float, min_price: 
             log(f"[ebay] retrying {len(blocked)} blocked searches in 60s...")
             time.sleep(60)
             _warm_up(client)
-    return results, blocked
+    return results, [q for q, _ in blocked]
 
 
 def search_html(client: httpx.Client, queries: list[str], max_price: float, min_price: float, log,
@@ -296,9 +298,41 @@ def item_details(client: httpx.Client, url: str) -> str:
     return item_page(client, url)[0]
 
 
-def item_page(client: httpx.Client, url: str) -> tuple[str, list[str]]:
-    """Condition notes, item specifics and seller description of one item page, plus its photo URLs."""
-    r = get(client, url)
+class PagesBlocked(httpx.HTTPError):
+    """eBay is refusing listing pages to scripts; stop asking for this run."""
+
+
+PAGE_FAIL_LIMIT = 3
+_page_state = {"fails": 0}
+_page_lock = threading.Lock()
+
+
+def pages_blocked() -> bool:
+    return _page_state["fails"] >= PAGE_FAIL_LIMIT
+
+
+def reset_page_breaker() -> None:
+    _page_state["fails"] = 0
+
+
+def item_page(client: httpx.Client, url: str, log=None) -> tuple[str, list[str]]:
+    """Condition notes, item specifics and seller description of one item page, plus its photo URLs.
+    eBay refuses these pages to scripts far more often than search pages; after a few refusals in a
+    row we stop asking (each refusal otherwise costs ~40 s of backoff)."""
+    if pages_blocked():
+        raise PagesBlocked("eBay is blocking listing pages")
+    try:
+        r = get(client, url, retries=0)  # no backoff: a refused page is not worth waiting for
+    except httpx.HTTPError:
+        with _page_lock:
+            _page_state["fails"] += 1
+            tripped = _page_state["fails"] == PAGE_FAIL_LIMIT
+        if tripped and log:
+            log("[ebay] eBay is refusing listing pages to scripts - skipping the rest this run. Photos then come "
+                "from the search results only; an eBay API key avoids this.")
+        raise
+    with _page_lock:
+        _page_state["fails"] = 0
     soup = BeautifulSoup(r.text, "html.parser")
     parts = []
     for sel in (

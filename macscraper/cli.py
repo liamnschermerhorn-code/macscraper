@@ -145,12 +145,10 @@ def collect(args, cfg: dict, crit: Criteria) -> list[Listing]:
         def reopen(it: Listing) -> None:
             """Fetch a listing's own page (specs / seller's words), then judge it again."""
             try:
-                if it.source == "ebay":
-                    it.description, it.images = ebay.item_page(c, it.url)
-                elif it.source.startswith("craigslist"):
-                    it.description, it.images = craigslist.item_page(c, it.url)
-                else:
+                if not fetch_page(c, it, log):
                     return
+            except ebay.PagesBlocked:
+                return  # already reported once
             except httpx.HTTPError as e:
                 log(f"  couldn't open {it.url}: {e}")
                 return
@@ -187,6 +185,19 @@ def collect(args, cfg: dict, crit: Criteria) -> list[Listing]:
     return items
 
 
+def fetch_page(c: httpx.Client, it: Listing, log) -> bool:
+    """Load a listing's own page: its description and (all) photo URLs. False if the site isn't supported."""
+    if it.source == "ebay":
+        text, images = ebay.item_page(c, it.url, log)
+    elif it.source.startswith("craigslist"):
+        text, images = craigslist.item_page(c, it.url)
+    else:
+        return False
+    it.description = text
+    it.images = images or it.images  # keep the search-result photo if the page shows none
+    return True
+
+
 def read_photos_step(c: httpx.Client, items: list[Listing], crit: Criteria, args, log) -> None:
     """Read the text in the photos of every POSSIBLE listing (About This Mac screenshots, model-number
     stickers, serial labels) and judge those listings again with what the photos say."""
@@ -203,19 +214,20 @@ def read_photos_step(c: httpx.Client, items: list[Listing], crit: Criteria, args
 
     def work(it: Listing) -> None:
         before = it.verdict
-        try:
-            if not it.images:  # eBay / Craigslist: the photos live on the listing's own page
-                if it.source == "ebay":
-                    it.description, it.images = ebay.item_page(c, it.url)
-                elif it.source.startswith("craigslist"):
-                    it.description, it.images = craigslist.item_page(c, it.url)
-            if not it.images:
-                return
-            stats["with_photos"] += 1
-            text = ocr.read_photos(c, it, backend, args.ocr_max_images, log)
-        except httpx.HTTPError as e:
-            log(f"  couldn't get photos for {it.url}: {e}")
+        # The listing's page has all its photos; search results carry only the first one (eBay) or none.
+        wants_page = not it.images or (it.source == "ebay" and len(it.images) <= 1)
+        if wants_page and not (it.source == "ebay" and ebay.pages_blocked()):
+            try:
+                fetch_page(c, it, log)
+            except ebay.PagesBlocked:
+                pass  # reported once; carry on with the photo from the search results
+            except httpx.HTTPError as e:
+                if it.source != "ebay":
+                    log(f"  couldn't open {it.url}: {e}")
+        if not it.images:
             return
+        stats["with_photos"] += 1
+        text = ocr.read_photos(c, it, backend, args.ocr_max_images, log)
         if not text:
             return
         stats["with_text"] += 1
