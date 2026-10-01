@@ -206,3 +206,18 @@ def test_old_format_serial_means_intel_or_m1():
     assert it.verdict == "POSSIBLE" and it.reasons[0].startswith("!!")
     # modern 10-character serial is fine
     assert ev("MacBook Air M2 24GB 512GB", description="Serial: FQ9X79G0Y1").verdict == "MATCH"
+
+
+def test_intel_giveaways_without_the_word_intel():
+    # the listing that slipped through: 2018 Intel Mac mini, no chip named
+    it = ev("Apple Mac mini A1993 3.2GHz 32GB RAM 256GB SSD Gray Z0W200042", price=435, negotiable=True)
+    assert it.verdict == "REJECT" and "A1993" in it.reasons[0]
+    assert "GHz" in ev("Apple Mac mini 3.2GHz 32GB RAM 256GB SSD").reasons[0]
+    assert "gray" in ev("Apple Mac mini 32GB RAM 256GB SSD Space Gray").reasons[0]
+    assert ev("MacBook Air A2337 24GB").verdict == "REJECT"     # M1 Air
+    assert ev("MacBook Pro A1707 32GB").verdict == "REJECT"     # 2016-17 Intel
+    # things that must keep working
+    assert ev("MacBook Pro 13 M2 A2338 24GB 512GB").verdict == "MATCH"  # A2338 is also the M2 13"
+    assert ev("Mac mini M2 A2686 24GB 512GB").verdict == "MATCH"
+    assert ev("MacBook Air M2 24GB 512GB Space Gray").verdict == "MATCH"  # gray is normal on laptops
+    assert ev("Mac mini M2 Pro 32GB silver").verdict == "MATCH"

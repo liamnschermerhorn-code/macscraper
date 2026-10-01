@@ -188,6 +188,16 @@ def serial_is_pre_m2(serial: str | None) -> bool:
     return serial is not None and len(serial) in (11, 12)
 
 
+# Apple model numbers ("A1993" is printed on the case). Every Mac numbered A1xxx predates Apple
+# Silicon (the first M1 Mac is A2337). A few A2xxx numbers are Intel or M1 too. NOT included:
+# A2338, which Apple used for both the M1 (2020) and M2 (2022) 13" MacBook Pro.
+OLD_MODEL_NUMBER_RE = re.compile(r"\bA(1\d{3}|2141|2159|2179|2251|2289|2337|2348|2442|2485|2615)\b", re.I)
+# Intel-style clock speed ("3.2GHz", "2.3 GHz"); Apple Silicon listings name the chip instead.
+GHZ_RE = re.compile(r"\b\d\.\d{1,2}\s?GHz\b", re.I)
+# The only gray Mac mini was the 2018 Intel one; every Apple Silicon mini is silver.
+GRAY_RE = re.compile(r"\b(space\s*)?gr[ae]y\b", re.I)
+
+
 def find_chips(text: str) -> set[str]:
     chips = set()
     for m in CHIP_RE.finditer(text):
@@ -261,6 +271,10 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
     if FOR_MAC_RE.search(title) or is_accessory(title):
         return reject("looks like an accessory")
 
+    # --- Intel / M1 giveaways that don't name the chip ---
+    if m := OLD_MODEL_NUMBER_RE.search(text):
+        return reject(f"model number {m.group(0).upper()} is an Intel/M1-era Mac")
+
     # --- chip ---
     chips = find_chips(title) or find_chips(body)
     families = {ch.split()[0] for ch in chips}
@@ -276,6 +290,10 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
         chip_known = len(families) == 1
     elif INTEL_RE.search(title):
         return reject("Intel Mac")
+    elif GHZ_RE.search(title):
+        return reject("GHz clock speed and no M-series chip named - looks like an Intel Mac")
+    elif kinds == {"mac mini"} and GRAY_RE.search(title):
+        return reject("gray Mac mini - only the 2018 Intel model was gray")
     elif OLD_YEAR_RE.search(title):
         return reject("model year means M1 or Intel")
     else:
