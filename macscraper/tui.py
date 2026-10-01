@@ -19,7 +19,7 @@ from .models import Listing
 
 VERDICT_STYLE = {"MATCH": "bold green", "POSSIBLE": "yellow", "REJECT": "dim red"}
 NARROW_BELOW = 100  # window columns; narrower than this puts the details pane under the list
-SHORT_SOURCE = {"ebay": "eBay", "reddit/appleswap": "Reddit"}
+SHORT_SOURCE = {"ebay": "eBay", "reddit/appleswap": "Reddit", "facebook": "Facebook"}
 
 
 def short_source(source: str) -> str:

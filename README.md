@@ -1,6 +1,6 @@
 # macscraper
 
-Searches eBay, Craigslist and r/appleswap for an **Apple Silicon MacBook (M2/M3/M4, any variant; `models` in `settings.toml` can add Mac mini / Mac Studio) with 24, 32, 64 or 128 GB RAM (`ram_options`),
+Searches eBay, Craigslist and r/appleswap (plus any Facebook Marketplace pages you saved) for an **Apple Silicon MacBook (M2/M3/M4, any variant; `models` in `settings.toml` can add Mac mini / Mac Studio) with 24, 32, 64 or 128 GB RAM (`ram_options`),
 fully working, ≤ $700 delivered** (change `max_total` in `settings.toml`). It sorts every listing into:
 
 | Verdict | Meaning |
@@ -73,6 +73,15 @@ is uploaded. One-time setup: `uv sync --extra ocr`. Then `uv run macscraper --oc
 `brew install tesseract` and `uv add pytesseract pillow`.) It only helps when the seller posted a screenshot or a
 readable label, and it makes the run slower (a page and several photos per possible listing); `--ocr-max-images`
 sets how many photos per listing (default 6).
+
+### Facebook Marketplace (pages you save)
+
+The scraper never contacts Facebook, but it can read Marketplace pages **you** saved. In your browser, search
+Marketplace (set your city and radius), **scroll down** to load more listings, then save the page: Chrome / Edge /
+Firefox: **Cmd+S → Format: "Webpage, Complete"** (not "HTML only"). Put the `.html` files in the `marketplace/` folder
+(or pass them: `uv run macscraper --import saved.html`). Each run reads them as one more source, with the same checks.
+Saved pages are a snapshot, so listings are marked "saved N days ago - may be sold" once they're a day old; replace
+the files with fresh ones to refresh. The folder is git-ignored, so nothing you save is ever uploaded.
 
 ### Craigslist: local or ships
 

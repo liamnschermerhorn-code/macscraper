@@ -23,7 +23,7 @@ from .http import client as make_client
 from .http import polite_pause
 from .models import Listing
 from . import ocr, rejected
-from .sources import craigslist, ebay, reddit
+from .sources import craigslist, ebay, facebook, reddit
 
 console = Console(stderr=True)
 
@@ -119,6 +119,12 @@ def collect(args, cfg: dict, crit: Criteria) -> list[Listing]:
                 items += fut.result()
             except Exception as e:  # one broken site shouldn't sink the whole run
                 log(f"[{futures[fut]}] failed: {e!r}")
+
+    # Marketplace pages you saved yourself (the scraper never contacts Facebook).
+    saved = args.import_paths or [cfg.get("import_dir", "marketplace")]
+    if fb_items := facebook.load(saved, log):
+        log(f"[facebook] {len(fb_items)} listings from your saved pages")
+        items += fb_items
 
     with make_client() as c:
         # De-duplicate across queries.
@@ -459,6 +465,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--reject", metavar="URL", help="reject a listing by its link; remembered for future runs")
     p.add_argument("--unreject", metavar="URL", help="take a listing back off your rejected list")
     p.add_argument("--why", default="", help="a note to go with --reject")
+    p.add_argument("--import", dest="import_paths", action="append", metavar="PATH",
+                   help="read Facebook Marketplace pages you saved (a .html file or a folder; repeatable). Default: the marketplace/ folder")
     p.add_argument("--no-tui", action="store_true", help="print a plain table instead of the live, resizable results screen")
     p.add_argument("--no-ask", action="store_true", help="don't ask questions at startup; use config/defaults")
     p.add_argument("--strict", action="store_true", help="drop listings that state neither chip nor RAM (default: keep them as POSSIBLE)")
