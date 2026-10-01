@@ -26,6 +26,8 @@ from .sources import craigslist, ebay, reddit
 
 console = Console(stderr=True)
 
+PAGE_WORKERS = 4  # listing pages fetched at the same time (Craigslist); eBay pages stay one-at-a-time
+
 DEFAULT_CL_QUERIES = ["macbook", "mac mini", "mac studio"]
 DEFAULT_REDDIT_QUERIES = ["24GB", "32GB", "M2", "M3", "M4"]
 # Big-city Craigslists searched for sellers who will ship. Your own city goes in craigslist_sites.
@@ -124,37 +126,45 @@ def collect(args, cfg: dict, crit: Criteria) -> list[Listing]:
                 evaluate(it, crit)
             polite_pause()
 
+        def reopen(it: Listing) -> None:
+            """Fetch a listing's own page (specs / seller's words), then judge it again."""
+            try:
+                if it.source == "ebay":
+                    it.description = ebay.item_details(c, it.url)
+                elif it.source.startswith("craigslist"):
+                    it.description = craigslist.item_details(c, it.url)
+                else:
+                    return
+            except httpx.HTTPError as e:
+                log(f"  couldn't open {it.url}: {e}")
+                return
+            it.reasons = []
+            evaluate(it, crit)
+            polite_pause()
+
+        def reopen_all(todo: list[Listing]) -> None:
+            # Craigslist pages tolerate several at once; eBay's bot protection does not, so eBay
+            # pages go one at a time - but alongside the Craigslist ones.
+            cl = [i for i in todo if i.source.startswith("craigslist")]
+            eb = [i for i in todo if i.source == "ebay"]
+            with ThreadPoolExecutor(max_workers=PAGE_WORKERS + 1) as pool:
+                futures = [pool.submit(reopen, i) for i in cl]
+                futures.append(pool.submit(lambda: [reopen(i) for i in eb]))
+                for f in futures:
+                    f.result()
+
         # Out-of-town Craigslist posts only survive if the seller ships, which is only ever
         # written in the post body - so open the ones that pass every other check.
         ship_check = [it for it in items if it.needs_shipping and not it.description
                       and it.reasons and it.reasons[0] == SHIP_REJECT]
         if ship_check:
             log(f"[craigslist] checking {len(ship_check)} out-of-town posts for shipping...")
-        for it in ship_check:
-            try:
-                it.description = craigslist.item_details(c, it.url)
-            except httpx.HTTPError as e:
-                log(f"  couldn't open {it.url}: {e}")
-                continue
-            it.reasons = []
-            evaluate(it, crit)
-            polite_pause()
+            reopen_all(ship_check)
 
         if args.deep:
             todo = [it for it in items if it.verdict != "REJECT" and not it.description]
             log(f"deep-checking {len(todo)} candidate pages...")
-            for it in todo:
-                try:
-                    if it.source == "ebay":
-                        it.description = ebay.item_details(c, it.url)
-                    elif it.source.startswith("craigslist"):
-                        it.description = craigslist.item_details(c, it.url)
-                except httpx.HTTPError as e:
-                    log(f"  couldn't open {it.url}: {e}")
-                    continue
-                it.reasons = []
-                evaluate(it, crit)
-                polite_pause()
+            reopen_all(todo)
     return items
 
 

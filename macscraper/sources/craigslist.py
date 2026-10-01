@@ -50,9 +50,9 @@ def search(client: httpx.Client, local_sites: list[str], ship_sites: list[str], 
            max_price: float, min_price: float, log, postal: str | None = None, distance: int | None = None) -> list[Listing]:
     """Local cities: everything (within `distance` miles of `postal`, if set).
     Other cities: kept for now, but filters only pass posts whose seller offers shipping.
-    Searches up to 3 cities at once; within a city, one request at a time."""
+    Searches up to 6 cities at once; within a city, one request at a time."""
     jobs = [(s, True) for s in local_sites] + [(s, False) for s in ship_sites if s not in local_sites]
-    with ThreadPoolExecutor(max_workers=3) as pool:
+    with ThreadPoolExecutor(max_workers=6) as pool:
         per_site = pool.map(
             lambda job: _search_site(client, job[0], job[1], queries, max_price, min_price, log, postal, distance), jobs
         )
