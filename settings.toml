@@ -15,6 +15,7 @@ loose = true          # keep listings that state neither chip nor RAM, as POSSIB
 deep = false           # open each candidate page to read specs + description (slower, more accurate)
 
 sources = ["ebay", "craigslist", "reddit"]
+facebook_city = "chicago"   # city in the report's Facebook Marketplace links (works without a Facebook account)
 
 # Craigslist, part 1 - LOCAL: your nearest Craigslist subdomains (the part before .craigslist.org,
 # e.g. https://sfbay.craigslist.org -> "sfbay"). Everything here counts as local pickup.

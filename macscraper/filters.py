@@ -30,6 +30,8 @@ class Criteria:
     models: tuple[str, ...] = ("macbook", "mac mini", "mac studio")
     # Score penalty for desktops (Mac mini / Mac Studio), so MacBooks rank first at a similar price. 0 = equal.
     mini_penalty: int = 5
+    # Facebook Marketplace city used in the report's links (the part after /marketplace/).
+    fb_city: str = "chicago"
     # Posts older than this many days are kept, but only as POSSIBLE.
     stale_days: float = 10
     # Keep listings that state neither chip nor RAM, as POSSIBLE: just ask the seller. False drops them.

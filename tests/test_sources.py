@@ -183,3 +183,11 @@ def test_ebay_default_queries_also_find_listings_without_chip_or_ram():
     assert any("-intel" in q and "(m2" not in q and "24gb" not in q for q in qs)  # neither
     url = ebay.search_url(qs[-1], 575, 150)
     assert "-intel" in url and "%28macbook" in url
+
+
+def test_manual_links_facebook_uses_city_and_budget():
+    from macscraper.cli import manual_links
+    links = manual_links(575, "chicago")
+    fb = [u for n, u in links.items() if n.startswith("Facebook")]
+    assert len(fb) == 4
+    assert all("/marketplace/chicago/search?" in u and "maxPrice=575" in u and "creation_time_descend" in u for u in fb)

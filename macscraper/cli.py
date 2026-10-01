@@ -50,15 +50,22 @@ def load_config(path: Path | None = None) -> dict:
     return merged
 
 
-def manual_links(max_total: float) -> dict[str, str]:
-    """Sites that need a login or JavaScript - check these by hand."""
+def manual_links(max_total: float, fb_city: str = "chicago") -> dict[str, str]:
+    """Sites the scraper can't read - check these by hand. The Facebook Marketplace links work
+    without a Facebook account (you may get a login pop-up you can close)."""
     q = quote_plus("macbook 24gb")
     m = int(max_total)
+
+    def fb(query: str) -> str:
+        return (f"https://www.facebook.com/marketplace/{fb_city}/search?query={quote_plus(query)}"
+                f"&maxPrice={m}&sortBy=creation_time_descend&exact=false")
+
     return {
-        "Facebook Marketplace (MacBook 24GB)": f"https://www.facebook.com/marketplace/search/?query={q}&maxPrice={m}&exact=false",
-        "Facebook Marketplace (Mac mini 24GB)": f"https://www.facebook.com/marketplace/search/?query={quote_plus('mac mini 24gb')}&maxPrice={m}",
+        "Facebook Marketplace - MacBook (newest first)": fb("macbook"),
+        "Facebook Marketplace - MacBook 24GB": fb("macbook 24gb"),
+        "Facebook Marketplace - Mac mini": fb("mac mini"),
+        "Facebook Marketplace - Mac Studio": fb("mac studio"),
         "OfferUp (MacBook 24GB)": f"https://offerup.com/search?q={q}&PRICE_MAX={m}",
-        "Facebook Marketplace (Mac Studio)": f"https://www.facebook.com/marketplace/search/?query={quote_plus('mac studio m2 max')}&maxPrice={m}",
         "OfferUp (Mac mini 24GB)": f"https://offerup.com/search?q={quote_plus('mac mini 24gb')}&PRICE_MAX={m}",
         "Mercari (MacBook 24GB)": f"https://www.mercari.com/search/?keyword={q}&maxPrice={m * 100}&itemStatuses=1",
         "Swappa (MacBook Air M2)": "https://swappa.com/listings/macbook-air-13-2022",
@@ -198,7 +205,7 @@ def write_outputs(items: list[Listing], out: Path, crit: Criteria, new_keys: set
             f"<td><small>{html.escape('; '.join(i.reasons))}</small></td></tr>"
         )
 
-    links = "".join(f'<li><a href="{u}" target="_blank">{html.escape(n)}</a></li>' for n, u in manual_links(crit.max_total).items())
+    links = "".join(f'<li><a href="{u}" target="_blank">{html.escape(n)}</a></li>' for n, u in manual_links(crit.max_total + crit.offer_stretch, crit.fb_city).items())
     rejects = sorted((i for i in items if i.verdict == "REJECT"), key=lambda i: i.reasons[0] if i.reasons else "")
     page = f"""<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Mac deal hunt</title>
@@ -369,6 +376,7 @@ def main(argv: list[str] | None = None) -> None:
         extra_red_flags=cfg.get("extra_red_flags", []),
         loose=False if args.strict else cfg.get("loose", True),
         stale_days=cfg.get("stale_days", 10),
+        fb_city=cfg.get("facebook_city", "chicago"),
     )
     if not args.no_ask and sys.stdin.isatty():
         ask_preferences(crit, ask_auctions=args.auctions is None, ask_stretch=args.stretch is None)
