@@ -200,3 +200,26 @@ def test_deep_switches(monkeypatch):
     for argv in ([], ["--no-deep"], ["--deep"]):
         cli.main(argv + ["--config", "/nonexistent.toml", "--no-ask"])
     assert seen == [(True, True), (False, True), (True, True)]        # default: read descriptions, and require them
+
+
+def test_marked_matches_are_applied_after_every_check_in_a_run(monkeypatch, tmp_path):
+    """The description step re-judges listings; a listing you marked as a match must still come out a MATCH."""
+    from macscraper import rejected
+
+    pages = {"1.html": "Clean machine.", "2.html": "iCloud locked, selling for parts.", "3.html": "Works."}
+    (tmp_path / "out").mkdir()
+    probe = []
+    monkeypatch.setattr(cli, "apply_user_rejections", lambda items, path: probe.append("rejections") or 0)
+    # mark #2 (which its own description would reject) as a match
+    rejected.add(tmp_path / "out" / "accepted.json", Listing(source="x", title="t", url="https://chicago.craigslist.org/x/2.html"), "REJECT")
+    from macscraper.sources import craigslist as cl
+    monkeypatch.setattr(cli.craigslist, "search", lambda *a, **k: [
+        Listing(source="craigslist/chicago", title=t, url=f"https://chicago.craigslist.org/x/{n}.html", price=500, shipping=0.0, negotiable=True)
+        for n, t in ((1, "MacBook Air M2 24GB 512GB"), (2, "MacBook Pro M2 24GB 1TB"), (3, "MacBook Air M2 24GB 256GB"))])
+    monkeypatch.setattr(cli.craigslist, "item_page", lambda client, url: (pages[url.split("/")[-1]], []))
+    monkeypatch.setattr(cli, "polite_pause", lambda: None)
+    args = argparse.Namespace(sources="craigslist", cl_sites="chicago", deep=True, ocr=False, import_paths=[], out=str(tmp_path / "out"))
+    got = {i.url.split("/")[-1]: i for i in cli.collect(args, {}, Criteria(max_total=700, require_description=True))}
+    assert got["1.html"].verdict == "MATCH" and got["3.html"].verdict == "MATCH"
+    assert got["2.html"].verdict == "MATCH" and got["2.html"].meta["user_matched"]            # your call beats the description rule
+    assert got["2.html"].meta["orig"][0] == "REJECT"

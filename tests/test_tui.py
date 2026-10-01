@@ -292,3 +292,112 @@ def test_details_pane_shows_what_the_seller_wrote():
             await pilot.pause()
             assert "Description not read" in str(app.query_one("#details").render())
     run(go())
+
+
+# ---- marking a listing as a match by hand ----------------------------------------------------------------
+
+def test_y_marks_a_match_remembers_it_and_toggles(tmp_path):
+    from macscraper import rejected
+
+    ok, no = tmp_path / "accepted.json", tmp_path / "rejected.json"
+
+    async def go():
+        items = make_items()
+        app = ResultsApp(items, set(), "", rejected_path=no, accepted_path=ok)
+        async with app.run_test(size=(120, 30)) as pilot:
+            await pilot.pause()
+            table = app.query_one("#list")
+            await pilot.press("down", "down")                         # the third listing: the Reddit post, POSSIBLE
+            await pilot.pause()
+            it = app.current()
+            assert it.verdict == "POSSIBLE"
+            before = it.reasons[:]
+
+            await pilot.press("y")
+            await pilot.pause()
+            assert it.verdict == "MATCH" and it.reasons[0] == "marked as a match by you (was POSSIBLE)"
+            assert all(f"the detector said: {r}" in it.reasons for r in before)         # what held it back stays visible
+            assert app.changed and app.current() is it and table.row_count == 3         # still on the same listing
+            data = rejected.load(ok)
+            assert list(data) == [it.key] and data[it.key]["was"] == "POSSIBLE"
+            await pilot.press("m")                                    # "matches only" now includes it
+            await pilot.pause()
+            assert it in app.visible()
+            await pilot.press("m")
+
+            await pilot.press("y")                                    # y again takes it back
+            await pilot.pause()
+            assert it.verdict == "POSSIBLE" and it.reasons == before and rejected.load(ok) == {}
+
+            await pilot.press("y", "u")                               # mark, then undo
+            await pilot.pause()
+            assert it.verdict == "POSSIBLE" and rejected.load(ok) == {}
+
+            first = items[0]                                          # an existing MATCH: nothing to do
+            table.move_cursor(row=table.get_row_index(first.key))
+            await pilot.pause()
+            app.changed = False
+            await pilot.press("y")
+            await pilot.pause()
+            assert first.verdict == "MATCH" and not first.meta and not app.changed and rejected.load(ok) == {}
+    run(go())
+
+
+def test_x_and_y_overrule_each_other_and_y_overrules_the_detector(tmp_path):
+    from macscraper import rejected
+
+    ok, no = tmp_path / "accepted.json", tmp_path / "rejected.json"
+
+    async def go():
+        items = make_items()
+        app = ResultsApp(items, set(), "", rejected_path=no, accepted_path=ok)
+        async with app.run_test(size=(120, 30)) as pilot:
+            await pilot.pause()
+            poss = items[2]
+            app.query_one("#list").move_cursor(row=app.query_one("#list").get_row_index(poss.key))
+            await pilot.pause()
+            await pilot.press("y")                                    # marked a match...
+            await pilot.pause()
+            await pilot.press("x")                                    # ...then rejected: the last one wins
+            await pilot.pause()
+            assert poss.verdict == "REJECT" and poss.reasons[0] == "rejected by you (was POSSIBLE)"   # "was" is the detector's verdict
+            assert list(rejected.load(no)) == [poss.key] and rejected.load(ok) == {}
+
+            await pilot.press("r")                                    # show rejected; y on a rejection overrules it
+            await pilot.pause()
+            app.query_one("#list").move_cursor(row=app.query_one("#list").get_row_index(poss.key))   # x had moved us on
+            await pilot.pause()
+            await pilot.press("y")
+            await pilot.pause()
+            assert poss.verdict == "MATCH" and rejected.load(no) == {} and list(rejected.load(ok)) == [poss.key]
+
+            detector_reject = next(i for i in items if i.verdict == "REJECT")        # the M1 listing the detector threw out
+            app.query_one("#list").move_cursor(row=app.query_one("#list").get_row_index(detector_reject.key))
+            await pilot.pause()
+            await pilot.press("y")
+            await pilot.pause()
+            assert detector_reject.verdict == "MATCH" and "was REJECT" in detector_reject.reasons[0]
+            assert any(r.startswith("the detector said:") for r in detector_reject.reasons)
+            await pilot.press("y")                                    # take it back: the detector's rejection returns
+            await pilot.pause()
+            assert detector_reject.verdict == "REJECT" and detector_reject.key not in rejected.load(ok)
+
+            text = "\n".join(app.acceptance_summary())
+            assert "You marked 1 listing(s) as matches" in text and "was POSSIBLE" in text and poss.url in text
+    run(go())
+
+
+def test_marked_matches_survive_to_the_next_run(tmp_path, monkeypatch):
+    from macscraper import cli, rejected
+
+    items = make_items()
+    held_back = items[2]
+    assert held_back.verdict == "POSSIBLE"
+    rejected.add(tmp_path / "accepted.json", held_back, "POSSIBLE")
+    rejected.add(tmp_path / "accepted.json", items[3], "REJECT")           # also one the detector rejected
+    fresh = make_items()
+    assert cli.apply_user_matches(fresh, tmp_path / "accepted.json") == 2
+    assert [i.verdict for i in fresh] == ["MATCH", "MATCH", "MATCH", "MATCH"]
+    assert fresh[2].reasons[0] == "marked as a match by you (was POSSIBLE)" and fresh[3].meta["orig"][0] == "REJECT"
+    assert cli.apply_user_matches(fresh, tmp_path / "accepted.json") == 0   # idempotent
+    assert cli.apply_user_matches(make_items(), tmp_path / "nothing.json") == 0

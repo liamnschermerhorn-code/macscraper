@@ -88,18 +88,21 @@ class ResultsApp(App):
         Binding("4", "sort('ram')", "", show=False),
         Binding("5", "sort('source')", "", show=False),
         Binding("6", "sort('title')", "", show=False),
+        Binding("y", "match", "Mark match"),
         Binding("x", "reject", "Reject this"),
         Binding("u", "undo", "Undo reject"),
         Binding("r", "rejected", "Show rejected"),
         Binding("q", "quit", "Quit"),
     ]
 
-    def __init__(self, items: list[Listing], new_keys: set[str], report: str = "", rejected_path: Path | None = None) -> None:
+    def __init__(self, items: list[Listing], new_keys: set[str], report: str = "", rejected_path: Path | None = None,
+                 accepted_path: Path | None = None) -> None:
         super().__init__()
         self.items = items
         self.new_keys = new_keys
         self.report = report
         self.rejected_path = rejected_path  # where your rejections are remembered (None: not saved)
+        self.accepted_path = accepted_path  # ...and the listings you marked as matches
         self.changed = False                # you rejected or restored something this session
         self.undo_stack: list[Listing] = []
         self.sort_column: str | None = None  # None: the scraper's own best-first order
@@ -183,7 +186,8 @@ class ResultsApp(App):
         self.by_key = {}
         for it in rows:
             self.by_key[it.key] = it
-            verdict = ("NEW " if it.key in self.new_keys and it.verdict != "REJECT" else "") + it.verdict
+            verdict = ("NEW " if it.key in self.new_keys and it.verdict != "REJECT" else "") + it.verdict \
+                + ("*" if it.meta.get("user_matched") else "")
             cells = [
                 Text(verdict[:10], style=VERDICT_STYLE.get(it.verdict, "")),
                 f"${it.total:,.0f}" if it.total is not None else "?",
@@ -267,16 +271,31 @@ class ResultsApp(App):
 
     # ------------------------------------------------------------------ rejecting by hand
     def _reject(self, it: Listing) -> None:
-        it.meta["orig"] = (it.verdict, list(it.reasons), it.score)
+        it.meta.setdefault("orig", (it.verdict, list(it.reasons), it.score))   # the detector's own verdict, kept once
+        was = it.meta["orig"][0]
+        it.meta.pop("user_matched", None)
         it.meta["user_rejected"] = True
-        was = it.verdict
         it.verdict, it.reasons, it.score = "REJECT", [f"rejected by you (was {was})"], -100
         rejected.add(self.rejected_path, it, was)
+        rejected.remove(self.accepted_path, it.key)
+
+    def _accept(self, it: Listing) -> None:
+        """Mark a listing as a match: your judgement overrules the detector's (even a rejection)."""
+        it.meta.setdefault("orig", (it.verdict, list(it.reasons), it.score))
+        was, old_reasons, old_score = it.meta["orig"]
+        it.meta.pop("user_rejected", None)
+        it.meta["user_matched"] = True
+        it.verdict, it.score = "MATCH", max(old_score, 0) + 30
+        it.reasons = [f"marked as a match by you (was {was})"] + ([f"the detector said: {r}" for r in old_reasons] if was != "MATCH" else [])
+        rejected.add(self.accepted_path, it, was)
+        rejected.remove(self.rejected_path, it.key)
 
     def _restore(self, it: Listing) -> None:
         it.verdict, it.reasons, it.score = it.meta.pop("orig")
         it.meta.pop("user_rejected", None)
+        it.meta.pop("user_matched", None)
         rejected.remove(self.rejected_path, it.key)
+        rejected.remove(self.accepted_path, it.key)
 
     def _redraw_keeping_place(self, row: int) -> None:
         self.rebuild()
@@ -306,10 +325,32 @@ class ResultsApp(App):
         self.changed = True
         self._redraw_keeping_place(row)
 
+    def action_match(self) -> None:
+        """Mark the highlighted listing as a match (the detector held it back). Press again to take it back."""
+        it = self.current()
+        if it is None:
+            return
+        if it.meta.get("user_matched"):
+            self._restore(it)
+            self.notify(f"Back to {it.verdict}")
+        elif it.verdict == "MATCH":
+            self.notify("Already a match")
+            return
+        else:
+            self._accept(it)
+            self.undo_stack.append(it)
+            self.notify("Marked as a match - it stays one. Press u to undo.")
+        self.changed = True
+        self.rebuild()
+        table = self.query_one("#list", DataTable)
+        if it.key in self.by_key:                      # stay on the same listing, wherever the sort puts it now
+            table.move_cursor(row=table.get_row_index(it.key))
+        self._show_details()
+
     def action_undo(self) -> None:
         while self.undo_stack:
             it = self.undo_stack.pop()
-            if it.meta.get("user_rejected"):
+            if it.meta.get("user_rejected") or it.meta.get("user_matched"):
                 self._restore(it)
                 self.changed = True
                 self.rebuild()
@@ -328,6 +369,17 @@ class ResultsApp(App):
         lines = [f"You rejected {len(mine)} listing(s) (saved in {self.rejected_path}):"]
         for i in mine:
             lines.append(f"  was {i.meta['orig'][0]:<8} {i.title[:90]}  {i.url}")
+        return lines
+
+    def acceptance_summary(self) -> list[str]:
+        """What you marked as matches this session: the detector held these back, so each is a clue."""
+        mine = [i for i in self.items if i.meta.get("user_matched") and i.meta.get("orig") and i.meta["orig"][0] != "MATCH"]
+        if not mine:
+            return []
+        lines = [f"You marked {len(mine)} listing(s) as matches (saved in {self.accepted_path}):"]
+        for i in mine:
+            why = "; ".join(i.meta["orig"][1])[:100]
+            lines.append(f"  was {i.meta['orig'][0]:<8} {i.title[:80]}  {i.url}" + (f"   ({why})" if why else ""))
         return lines
 
     # ------------------------------------------------------------------ actions

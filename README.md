@@ -42,7 +42,7 @@ uv run macscraper --strict                   # drop listings that state neither 
 When the run finishes you get a live results screen that reflows as you resize the window (wide: list plus a
 detail pane; narrow: the detail pane drops underneath). Keys: **↑/↓** move, **Enter** or **o** open the link,
 **c** copy it, **click a column heading** (or press **1**-**6**) to sort by it, and click it again to flip the order,
-**m** matches only, **x** reject the highlighted listing (see below), **u** undo, **r** show rejected
+**m** matches only, **y** mark the highlighted listing as a match, **x** reject it (see below), **u** undo, **r** show rejected
 listings (with the reason), **q** quit. `--no-tui` (or
 `--watch`, or piping the output) prints a plain table instead; `results/report.html` is written either way.
 
@@ -51,6 +51,11 @@ and it stays gone on later runs (saved in `results/rejected.json`, keyed by the 
 last rejection; press **r** to see everything rejected, and **x** on one you rejected earlier brings it back. When you
 quit, it prints what you rejected: paste those lines to Claude and each one becomes a new rule, so the detector
 catches that kind of listing itself next time. Without the screen: `--reject URL [--why "..."]` / `--unreject URL`.
+
+**Marking matches by hand.** Press **y** on a listing the detector only called POSSIBLE (or even rejected) and it
+becomes a MATCH, marked with a `*`; it stays one on later runs (saved in `results/accepted.json`). Press **y** again to
+take it back. **x** and **y** overrule each other, so the last one you pressed wins. On quit it prints what you marked,
+with the detector's reason for holding each one back, so those can become rules too.
 
 `results/seen.json` remembers what you've already seen, so the report and alerts mark only new listings as **NEW**.
 

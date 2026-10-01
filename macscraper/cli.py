@@ -190,6 +190,8 @@ def collect(args, cfg: dict, crit: Criteria) -> list[Listing]:
 
         if args.ocr:
             read_photos_step(c, items, crit, args, log)
+    if n_ok := apply_user_matches(items, Path(getattr(args, "out", "results")) / "accepted.json"):
+        log(f"{n_ok} listing(s) are matches because you marked them before")
     return items
 
 
@@ -207,6 +209,22 @@ def apply_user_rejections(items: list[Listing], path: Path | None) -> int:
             it.verdict, it.score = "REJECT", -100
             it.reasons = [f"rejected by you (was {was})" + (f": {note}" if note else "")]
             n += 1
+    return n
+
+
+def apply_user_matches(items: list[Listing], path: Path | None) -> int:
+    """Listings you marked as matches in an earlier run are matches again. Done last, after every check, so
+    nothing re-judges them; the detector's own verdict stays in `meta` so the screen can bring it back."""
+    mine = rejected.load(path)
+    n = 0
+    for it in items:
+        if it.key in mine and not it.meta.get("user_rejected") and not it.meta.get("user_matched"):
+            it.meta.setdefault("orig", (it.verdict, list(it.reasons), it.score))
+            was, old_reasons, old_score = it.meta["orig"]
+            it.meta["user_matched"] = True
+            it.verdict, it.score = "MATCH", max(old_score, 0) + 30
+            it.reasons = [f"marked as a match by you (was {was})"] + ([f"the detector said: {r}" for r in old_reasons] if was != "MATCH" else [])
+            n += was != "MATCH"
     return n
 
 
@@ -396,11 +414,12 @@ def run_once(args, cfg: dict, crit: Criteria) -> None:
     if interactive and any(i.verdict != "REJECT" for i in items):
         from .tui import ResultsApp
 
-        app = ResultsApp(items, new_keys, str(report), rejected_path=Path(args.out) / "rejected.json")
+        app = ResultsApp(items, new_keys, str(report), rejected_path=Path(args.out) / "rejected.json",
+                         accepted_path=Path(args.out) / "accepted.json")
         app.run()  # live screen; resize the window and it reflows
         if app.changed:  # you rejected or restored something: bring the saved report in line
             report = write_outputs(items, Path(args.out), crit, new_keys)
-            for line in app.rejection_summary():
+            for line in app.rejection_summary() + app.acceptance_summary():
                 console.print(line)
     else:
         print_table(items, new_keys, args.limit)
