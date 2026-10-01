@@ -64,10 +64,19 @@ def test_over_budget():
 
 
 def test_best_offer_stretch():
+    # over budget only by an amount you can negotiate, everything else confirmed -> a MATCH, with a note
     it = ev("MacBook Air M2 24GB 1TB", price=709, negotiable=True)
-    assert it.verdict == "POSSIBLE"
-    assert any("offer" in r for r in it.reasons)
-    assert ev("MacBook Air M2 24GB 1TB", price=709).verdict == "REJECT"
+    assert it.verdict == "MATCH"
+    assert any("$9 over budget - make an offer" in r for r in it.reasons)
+    assert ev("MacBook Air M2 24GB 1TB", price=709).verdict == "REJECT"               # not negotiable
+    assert ev("MacBook Air M2 24GB 1TB", price=800, negotiable=True).verdict == "REJECT"  # beyond the stretch
+    # ...but only the price was the reason it wasn't a MATCH: any other doubt still keeps it POSSIBLE
+    assert ev("MacBook Air 13 Midnight", price=709, negotiable=True).verdict == "POSSIBLE"            # chip/RAM unknown
+    assert ev("MacBook Air M2 24GB 1TB", price=709, negotiable=True, is_auction=True).verdict == "POSSIBLE"
+    assert ev("MacBook Air M2 24GB 1TB", price=709, negotiable=True, shipping=None).verdict == "POSSIBLE"
+    assert ev("MacBook Air M2 24GB 1TB", price=709, negotiable=True, price_is_range=True).verdict == "POSSIBLE"
+    # a flexible match ranks below an in-budget one with the same specs
+    assert ev("MacBook Air M2 24GB 1TB", price=709, negotiable=True).score < ev("MacBook Air M2 24GB 1TB", price=650).score
 
 
 def test_possible_when_ram_missing():

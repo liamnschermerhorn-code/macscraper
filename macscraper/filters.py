@@ -25,7 +25,7 @@ class Criteria:
     allow_auctions: bool = True
     # Assume this much shipping when a listing doesn't say (eBay usually shows it; others don't).
     assumed_shipping: float = 0.0
-    # Negotiable listings up to this much over budget are kept as POSSIBLE ("make an offer").
+    # Negotiable listings up to this much over budget are kept (a MATCH if all else checks out; "make an offer").
     offer_stretch: float = 75.0
     extra_red_flags: list[str] = field(default_factory=list)
     # Which kinds of Mac to keep: any of "macbook", "mac mini", "imac", "mac studio".
@@ -460,8 +460,9 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
             over = total - c.max_total
             if not (item.negotiable and over <= c.offer_stretch):
                 return reject(f"${total:.0f} over budget")
+            # Over budget only by an amount the seller will probably come down on: everything else is
+            # confirmed, so this is still a MATCH - the note says what to do.
             reasons.append(f"${over:.0f} over budget - make an offer")
-            price_known = False  # never a clean MATCH
         if item.shipping is None:
             reasons.append("shipping unknown")
         if item.price_is_range:
