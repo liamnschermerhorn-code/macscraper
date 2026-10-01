@@ -53,6 +53,10 @@ MODEL_RES = {
 CHIP_RE = re.compile(r"(?<![\w.])m\s?([1-5])(?:\s?(pro|max|ultra))?(?![\w.])", re.I)
 NOT_CHIP_AFTER = re.compile(r"^\s*(nvme|ssd|sata|slot|drive|2280|key)", re.I)
 
+# Intel "Core m" processors (12" MacBook, 2015-2017): "Core m3", "m3-7Y32", "m5-6Y54", "m3-8100Y".
+# They must never be read as Apple's M3 chip. (The Y-series letter keeps "M2-24GB" safe.)
+INTEL_CORE_M_RE = re.compile(r"\bcore\s?m[3579]\b|\bm[3579][-\s]?\d{1,4}y\d{0,2}\b", re.I)
+
 INTEL_RE = re.compile(r"\b(intel|core\s?i[3579]|i[3579][-\s]\d{4}|i[3579]\b|xeon|2012|2013|2014|2015|2016|2017|2018|2019)\b", re.I)
 
 # Intel wording without model years: safe to look for in a long description, where a bare year
@@ -221,6 +225,10 @@ PRO_15_RE = re.compile(
     r"mac\s?book\s*pro[^0-9]{0,15}\b15(?:\.\d)?\s?" + _INCH + r"|\b15(?:\.\d)?\s?" + _INCH + r"\s*(?:apple\s+)?mac\s?book\s*pro",
     re.I,
 )
+# 11" and 12" MacBooks (Air 11", the 12" MacBook) were only ever made with Intel chips.
+SMALL_MACBOOK_RE = re.compile(
+    r"mac\s?book[^\n]{0,30}?\b1[12]\s?" + _INCH + r"|\b1[12]\s?" + _INCH + r"\s*(?:apple\s+)?mac\s?book", re.I
+)
 # Apple custom-configuration numbers like Z0V10001W / Z0W200042. Z0xx numbers predate the first M1
 # Mac (late 2020). Inferred pattern from observed listings, not an Apple-published rule.
 OLD_CTO_RE = re.compile(r"\bZ0[A-Z0-9]{5,8}\b", re.I)
@@ -228,6 +236,7 @@ OLD_CTO_RE = re.compile(r"\bZ0[A-Z0-9]{5,8}\b", re.I)
 
 def find_chips(text: str) -> set[str]:
     chips = set()
+    text = INTEL_CORE_M_RE.sub(" ", text)
     for m in CHIP_RE.finditer(text):
         if NOT_CHIP_AFTER.match(text[m.end():]):
             continue
@@ -328,6 +337,8 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
         return reject("model year means M1 or Intel")
     elif INTEL_WORDS_RE.search(body):
         return reject("description says Intel")
+    elif INTEL_CORE_M_RE.search(text):
+        return reject("Intel Core m processor (not Apple's M-series)")
     else:
         for rx, chip in YEAR_HINTS:
             if rx.search(title) and chip in wanted:
@@ -342,6 +353,8 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
     old_hint = None
     if PRO_15_RE.search(text):
         old_hint = "15-inch MacBook Pro - Apple Silicon never made one, so it's Intel"
+    elif SMALL_MACBOOK_RE.search(text):
+        old_hint = "11/12-inch MacBook - only Intel models were made that small"
     elif chips and (INTEL_RE.search(title) or OLD_YEAR_RE.search(title)):
         old_hint = "title also mentions an Intel-era year or chip"
     elif m := OLD_CTO_RE.search(text):

@@ -274,3 +274,23 @@ def test_part_listings_and_impossible_prices_rejected():
     # real machines and auctions are unaffected
     assert ev("MacBook Air M2 24GB 512GB", price=300).verdict == "MATCH"
     assert ev("MacBook Pro 14 M4 Pro 24GB", price=120, is_auction=True).verdict == "POSSIBLE"
+
+
+def test_intel_core_m_is_not_apple_m3():
+    from macscraper.filters import find_chips
+    # the listing that slipped through: 2017 12" MacBook, Intel Core m3-7Y32
+    it = ev('Apple MacBook MMGL2LL/A 12" 256GB m3-7Y32, Rose Gold', price=300)
+    assert it.verdict == "REJECT", it.reasons
+    assert find_chips("MacBook m3-7Y32 1.2GHz") == set()
+    assert find_chips("MacBook Core m5-6Y54") == set()
+    assert find_chips("MacBook m3-8100Y") == set()
+    assert "Intel Core m" in ev("MacBook 256GB Core m3", price=300).reasons[0]
+    # 11"/12" MacBooks are Intel-only even when nothing else says so
+    for title in ('Apple MacBook 12" 256GB Rose Gold', 'MacBook Air 11" 2015 8GB', "Apple MacBook 12 inch 512GB Space Gray"):
+        r = ev(title, price=300)
+        assert r.verdict == "REJECT" and ("12" in r.reasons[0] or "11" in r.reasons[0] or "Intel" in r.reasons[0]), (title, r.reasons)
+    # real Apple M3 and hyphenated M-chip titles keep working
+    assert find_chips("MacBook Air M3 24GB") == {"M3"}
+    assert find_chips("MacBook Air M2-24GB-1TB") == {"M2"}
+    assert ev("MacBook Air M3-24GB-512GB", price=450).verdict == "MATCH"
+    assert ev('MacBook Pro 14" M4 Pro 12-core 24GB 512GB', price=480).verdict == "MATCH"
