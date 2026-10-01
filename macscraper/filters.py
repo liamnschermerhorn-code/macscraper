@@ -32,8 +32,8 @@ class Criteria:
     mini_penalty: int = 5
     # Posts older than this many days are kept, but only as POSSIBLE.
     stale_days: float = 10
-    # Keep listings that state neither chip nor RAM (lots of noise, occasionally a steal).
-    loose: bool = False
+    # Keep listings that state neither chip nor RAM, as POSSIBLE: just ask the seller. False drops them.
+    loose: bool = True
 
 
 MAC_RE = re.compile(r"\b(mac\s?book|macbook|mac\s?mini|imac|mac\s?studio)\b", re.I)
@@ -353,8 +353,10 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
     else:
         reasons.append("RAM not stated")
 
-    if not item.chip and not ram_ok and not c.loose:
-        return reject("can't tell chip or RAM")
+    if not item.chip and not ram_ok:
+        if not c.loose:
+            return reject("can't tell chip or RAM")
+        reasons.append("ask the seller for the chip and RAM (About This Mac)")
 
     # --- condition / red flags ---
     # In the title or marketplace condition field a red flag is disqualifying. In a long

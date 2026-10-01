@@ -333,7 +333,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--auctions", action="store_true", default=None, help="include auctions (skips the question)")
     p.add_argument("--no-auctions", dest="auctions", action="store_false", help="skip auctions (skips the question)")
     p.add_argument("--no-ask", action="store_true", help="don't ask questions at startup; use config/defaults")
-    p.add_argument("--loose", action="store_true", help="also keep listings that state neither chip nor RAM")
+    p.add_argument("--strict", action="store_true", help="drop listings that state neither chip nor RAM (default: keep them as POSSIBLE)")
     p.add_argument("--deep", action="store_true", help="open each candidate's page to read specs/description")
     p.add_argument("--watch", type=float, default=0, help="re-run every N minutes")
     p.add_argument("--ntfy", default=None, help="ntfy.sh topic for phone alerts on new matches")
@@ -357,7 +357,7 @@ def main(argv: list[str] | None = None) -> None:
         mini_penalty=cfg.get("mini_penalty", 5),
         allow_auctions=not cfg.get("no_auctions", False) if args.auctions is None else args.auctions,
         extra_red_flags=cfg.get("extra_red_flags", []),
-        loose=args.loose or cfg.get("loose", False),
+        loose=False if args.strict else cfg.get("loose", True),
         stale_days=cfg.get("stale_days", 10),
     )
     if not args.no_ask and sys.stdin.isatty():

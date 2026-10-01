@@ -82,10 +82,17 @@ def test_year_inference():
     assert it.chip == "M2?"
 
 
-def test_neither_chip_nor_ram_rejected_unless_loose():
-    assert ev("MacBook Air 13 Midnight").verdict == "REJECT"
-    it = evaluate(Listing(source="t", title="MacBook Air 13 Midnight", url="u", price=500, shipping=0), Criteria(loose=True))
-    assert it.verdict == "POSSIBLE"
+def test_neither_chip_nor_ram_is_possible_unless_strict():
+    for title in ("MacBook Air 13 Midnight", "Apple Mac mini", "Apple Mac Studio 1TB"):
+        it = ev(title)
+        assert it.verdict == "POSSIBLE", (title, it.reasons)
+        assert any("ask the seller" in r for r in it.reasons)
+    strict = evaluate(Listing(source="t", title="MacBook Air 13 Midnight", url="u", price=500, shipping=0), Criteria(loose=False))
+    assert strict.verdict == "REJECT"
+    # clear Intel giveaways are still rejected even though chip/RAM are missing
+    assert ev("Apple Mac mini A1993 Space Gray").verdict == "REJECT"
+    assert ev('MacBook Pro 15" 1TB').verdict == "REJECT"
+    assert ev("MacBook Air 2019 Intel").verdict == "REJECT"
 
 
 def test_auction_is_possible():

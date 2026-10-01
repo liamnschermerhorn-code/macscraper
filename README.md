@@ -6,7 +6,7 @@ fully working, ≤ $500 delivered** (change `max_total` in `settings.toml`). It 
 | Verdict | Meaning |
 |---|---|
 | **MATCH** | Chip, RAM and price all confirmed from the listing, no red flags |
-| **POSSIBLE** | Nothing disqualifying, but something needs checking (RAM not stated, auction, Best Offer slightly over budget, a warning word in the description) |
+| **POSSIBLE** | Nothing disqualifying, but something needs checking (chip and/or RAM not stated - just ask the seller, auction, Best Offer slightly over budget, a warning word in the description) |
 | **REJECT** | iMac, wrong chip/RAM, over budget, accessory, Intel/M1 model year, or a red flag: locked / iCloud / MDM / parts / as-is / cracked / water / won't boot, etc. Phrases like "not locked" or "no damage" are recognized as fine. |
 
 ## Run it (on your Mac)
@@ -36,7 +36,7 @@ uv run macscraper --watch 20 --ntfy my-topic # re-check every 20 min, push NEW m
 uv run macscraper --cl-sites sfbay,sacramento
 uv run macscraper --stretch 0 --no-auctions  # strictly ≤ budget, fixed price only (no questions)
 uv run macscraper --no-ask                   # skip the questions, use the settings files
-uv run macscraper --loose                    # also keep listings that state neither chip nor RAM
+uv run macscraper --strict                   # drop listings that state neither chip nor RAM (normally kept as POSSIBLE)
 ```
 
 `results/seen.json` remembers what you've already seen, so the report and alerts mark only new listings as **NEW**.

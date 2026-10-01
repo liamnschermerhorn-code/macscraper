@@ -11,6 +11,7 @@ models = ["macbook", "mac mini", "mac studio"]   # also possible: "imac"
 mini_penalty = 5                   # rank desktops (mini/Studio) a little below MacBooks; 0 = equal
 no_auctions = false    # default answer to "Include auctions?" at startup
 stale_days = 10        # Reddit posts older than this stay POSSIBLE, with a "may be gone" note
+loose = true          # keep listings that state neither chip nor RAM, as POSSIBLE (ask the seller); false drops them
 deep = false           # open each candidate page to read specs + description (slower, more accurate)
 
 sources = ["ebay", "craigslist", "reddit"]
