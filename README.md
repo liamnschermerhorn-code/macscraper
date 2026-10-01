@@ -39,6 +39,11 @@ uv run macscraper --no-ask                   # skip the questions, use the setti
 uv run macscraper --strict                   # drop listings that state neither chip nor RAM (normally kept as POSSIBLE)
 ```
 
+When the run finishes you get a live results screen that reflows as you resize the window (wide: list plus a
+detail pane; narrow: the detail pane drops underneath). Keys: **↑/↓** move, **Enter** or **o** open the link,
+**c** copy it, **m** matches only, **r** show rejected listings (with the reason), **q** quit. `--no-tui` (or
+`--watch`, or piping the output) prints a plain table instead; `results/report.html` is written either way.
+
 `results/seen.json` remembers what you've already seen, so the report and alerts mark only new listings as **NEW**.
 
 ### Settings

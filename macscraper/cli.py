@@ -292,7 +292,13 @@ def run_once(args, cfg: dict, crit: Criteria) -> None:
 
     report = write_outputs(items, Path(args.out), crit, new_keys)
     seen_path.write_text(json.dumps(seen, indent=1))
-    print_table(items, new_keys, args.limit)
+    interactive = sys.stdout.isatty() and sys.stdin.isatty() and not args.no_tui and not args.watch
+    if interactive and any(i.verdict != "REJECT" for i in items):
+        from .tui import ResultsApp
+
+        ResultsApp(items, new_keys, str(report)).run()  # live screen; resize the window and it reflows
+    else:
+        print_table(items, new_keys, args.limit)
     console.log(
         f"{sum(i.verdict == 'MATCH' for i in items)} matches, {sum(i.verdict == 'POSSIBLE' for i in items)} possibles, "
         f"{len(new_keys)} new. Report: {report.resolve()}"
@@ -349,6 +355,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--cl-sites", default=None, help="your local craigslist subdomains, e.g. sfbay,sacramento")
     p.add_argument("--auctions", action="store_true", default=None, help="include auctions (skips the question)")
     p.add_argument("--no-auctions", dest="auctions", action="store_false", help="skip auctions (skips the question)")
+    p.add_argument("--no-tui", action="store_true", help="print a plain table instead of the live, resizable results screen")
     p.add_argument("--no-ask", action="store_true", help="don't ask questions at startup; use config/defaults")
     p.add_argument("--strict", action="store_true", help="drop listings that state neither chip nor RAM (default: keep them as POSSIBLE)")
     p.add_argument("--deep", action="store_true", help="open each candidate's page to read specs/description")
