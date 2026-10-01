@@ -170,6 +170,24 @@ def seller_ships(text: str) -> bool | None:
     return None
 
 
+# A serial written in the listing: "Serial: C02XG0FDH03Q", "S/N FVFGK0XXQ6L4", "SN#...".
+# Must contain a digit, so words like "information" aren't mistaken for one.
+SERIAL_RE = re.compile(
+    r"(?:serial(?:\s*(?:number|no\.?|#))?|s/n|\bsn)\s*[:#\-]?\s*(?=[A-Z0-9]*\d)([A-Z0-9]{10,12})\b", re.I
+)
+
+
+def find_serial(text: str) -> str | None:
+    m = SERIAL_RE.search(text)
+    return m.group(1).upper() if m else None
+
+
+def serial_is_pre_m2(serial: str | None) -> bool:
+    """Apple's old 11/12-character serials (factory/year/week/model code) were used on every Intel
+    and first-generation M1 Mac. M2 and newer Macs have randomized 10-character serials."""
+    return serial is not None and len(serial) in (11, 12)
+
+
 def find_chips(text: str) -> set[str]:
     chips = set()
     for m in CHIP_RE.finditer(text):
@@ -269,6 +287,15 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
         else:
             reasons.append("chip not stated")
 
+    # --- serial number (when the seller wrote one) ---
+    serial_conflict = False
+    if serial_is_pre_m2(find_serial(text)):
+        if not chip_known:
+            return reject("serial number format means a pre-2021 Mac (Intel or M1)")
+        serial_conflict = True
+        reasons.insert(0, "!! serial number looks like an old Intel/M1 Mac but the listing says "
+                          f"{item.chip} - likely mislabeled, verify before buying")
+
     # --- RAM ---
     ram = find_ram(title) or find_ram(body)
     ram_ok = [r for r in ram if r in c.ram_options]
@@ -347,7 +374,7 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
     confirmed = (
         chip_known and ram_known and price_known and item.shipping is not None
         and not item.is_auction and not item.price_is_range and not desc_flags
-        and not item.sold_note and not stale
+        and not item.sold_note and not stale and not serial_conflict
     )
     item.verdict = "MATCH" if confirmed else "POSSIBLE"
 
@@ -362,6 +389,7 @@ def evaluate(item: Listing, c: Criteria) -> Listing:
     score -= 0 if ram_known else 20
     score -= 10 if item.is_auction else 0
     score -= 25 if desc_flags else 0
+    score -= 30 if serial_conflict else 0
     score -= 20 if item.sold_note else 0
     score -= 10 if stale else 0
     score -= c.mini_penalty if is_mini else 0

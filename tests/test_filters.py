@@ -189,3 +189,20 @@ def test_sold_and_stale_handling():
     it = ev("MacBook Air M2 24GB 512GB", age_days=14)
     assert it.verdict == "POSSIBLE" and any("14 days ago" in r for r in it.reasons)
     assert ev("MacBook Air M2 24GB 512GB", age_days=3).verdict == "MATCH"
+
+
+def test_old_format_serial_means_intel_or_m1():
+    from macscraper.filters import find_serial, serial_is_pre_m2
+    assert find_serial("Serial: C02XG0FDH03Q, works great") == "C02XG0FDH03Q"
+    assert find_serial("S/N FVFGK0XXQ6L4") == "FVFGK0XXQ6L4"
+    assert find_serial("Serial number information available on request") is None
+    assert serial_is_pre_m2("C02XG0FDH03Q") and serial_is_pre_m2("W88123456AB")
+    assert not serial_is_pre_m2("FQ9X79G0Y1") and not serial_is_pre_m2(None)
+    # chip not stated + old serial -> rejected
+    it = ev("MacBook Pro 24GB 512GB", description="Serial: C02XG0FDH03Q")
+    assert it.verdict == "REJECT" and "serial" in it.reasons[0]
+    # seller says M2 but the serial is old -> never a clean MATCH
+    it = ev("MacBook Pro M2 24GB 512GB", description="Serial: C02XG0FDH03Q")
+    assert it.verdict == "POSSIBLE" and it.reasons[0].startswith("!!")
+    # modern 10-character serial is fine
+    assert ev("MacBook Air M2 24GB 512GB", description="Serial: FQ9X79G0Y1").verdict == "MATCH"
