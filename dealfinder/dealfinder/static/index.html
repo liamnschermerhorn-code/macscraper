@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dealfinder</title>
+<link rel="stylesheet" href="/static/style.css">
+</head><body>
+<header><h1>Dealfinder</h1><p>Tell Claude what you want to buy. It asks the right questions, then checks the listings for you.</p></header>
+<main>
+  <section id="chat">
+    <div id="log" aria-live="polite"></div>
+    <form id="form"><input id="box" autocomplete="off" placeholder="e.g. a used Sony WH-1000XM5 under $220" required>
+    <button>Send</button></form>
+    <div id="gate" hidden><input id="code" placeholder="Access code" type="password"></div>
+  </section>
+  <section id="spec" hidden>
+    <h2 id="spectitle"></h2><ul id="speclist"></ul>
+    <button id="go">Find listings</button>
+  </section>
+  <section id="out" hidden>
+    <div id="notes"></div>
+    <nav id="tabs"></nav>
+    <table><thead><tr id="head"></tr></thead><tbody id="rows"></tbody></table>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body></html>
